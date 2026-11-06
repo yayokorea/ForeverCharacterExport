@@ -1,0 +1,8 @@
+dev/.tools/
+__pycache__/
+*.pyc
+references/
+docs/
+assets/
+dist/
+AGENTS.md
