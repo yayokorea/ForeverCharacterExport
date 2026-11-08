@@ -294,6 +294,10 @@ local function weaponSlot(self, ctx, slot)
     rec.itemID = self:Probe("GetInventoryItemID", PLAYER, slotID)
     local itemID = self:Val(rec.itemID, 1)
     if returnedNothing(rec.itemID) then
+        -- UI contract (Stats:687-688): no item ID for a valid slot means nothing is equipped. Keep only the
+        -- evidence string so an empty slot is not reported as an unread value in the coverage footer.
+        rec.itemID = nil
+        rec.emptyEvidence = "GetInventoryItemID returned no value for a valid slot ID"
         if slot.isMainHand then
             rec.kind, rec.skillLineID = "skill", UNARMED_SKILL
             rec.basis = "empty main-hand: UI fallback rule (Stats:687-689)"

@@ -283,6 +283,11 @@ Tests["collector.combatdetails.weapon_skill_links"] = function()
         check(main.skill.values[1].description == nil, "skill line description is not stored")
         check(ranged.kind == "skill" and ranged.skillLineID == 45 and ranged.skill.values[1].name == "Bows", "bow -> 45")
         check(off.kind == "empty" and off.skillLineID == nil, "empty off hand has no skill")
+        check(off.itemID == nil and off.emptyEvidence ~= nil, "empty slot keeps evidence, not an unread probe")
+        local _, problems = Addon:Tally(section)
+        for _, problem in ipairs(problems) do
+            check(problem.api ~= "GetInventoryItemID", "an empty slot is not an unread value in coverage")
+        end
         check(has(text, "주무기 (MainHandSlot, slot 16): skillLineID 43 Swords (rank 100, modifier 2, max 300)"), text)
         check(has(text, "원거리 (RangedSlot, slot 18): skillLineID 45 Bows"), text)
         check(has(text, "보조무기 (SecondaryHandSlot, slot 17): 연결된 무기 숙련 없음 - slot empty"), text)
