@@ -64,12 +64,21 @@ local _, Addon = ...
 -- Caps keep the default report small. Anything beyond is counted but not listed and the formatter says so.
 Addon.legacyLimits = Addon.legacyLimits or {
     categories = 120, -- categories read
-    challenges = 80,  -- challenges listed in detail (class default category and its children first)
+    challenges = 80,  -- challenges listed in detail in summary mode (relevant categories only)
+    challengesFull = 400, -- challenges listed in detail in full mode (every category)
     criteria = 5,     -- criteria lines per not-yet-earned challenge
     rewardLevels = 40,
     rewardsPerLevel = 4,
     nodes = 200,      -- tree nodes read per tree
 }
+
+-- Detail level. Full only when Addon.detail.legacy is true or "full" (set from the settings window); anything else
+-- is the summary: a count table for every category, challenge detail only for the player's class and professions.
+local function isFull(self)
+    local detail = self.detail
+    if type(detail) ~= "table" then return false end
+    return detail.legacy == true or detail.legacy == "full"
+end
 
 local TREES = {
     { key = "PROFESSIONS", constant = "LEGACY_TREE_PROFESSIONS_ID" },
@@ -266,7 +275,14 @@ local function collectReward(self, limits)
         return reward
     end
     reward.level = self:Probe("C_MajorFactions.GetCurrentRenownLevel", factionID)
-    reward.data = self:Probe("C_MajorFactions.GetMajorFactionData", factionID)
+    -- Only the scalar fields the report prints are read. MajorFactionData also carries `highlights` (nested) and
+    -- `factionFontColor` (type DBColorExport, not defined in the mirror; most likely a mixin-style object with
+    -- function members). A whole-struct copy failed in-game with FCE_UNSUPPORTED_VALUE_TYPE (build 70790 report),
+    -- so the struct is never copied whole. Field list: MajorFactionsDocumentation.lua:259-284.
+    reward.data = self:ProbeFields("C_MajorFactions.GetMajorFactionData", {
+        "name", "factionID", "isUnlocked", "renownLevel", "maxLevel", "renownReputationEarned",
+        "renownLevelThreshold",
+    }, factionID)
     reward.levels = self:Probe("C_MajorFactions.GetRenownLevels", factionID)
     local levels = self:Val(reward.levels)
     if type(levels) == "table" then
@@ -327,8 +343,33 @@ local function readCriteria(self, entry, limits)
     end
 end
 
-local function collectChallenges(self, limits, pointsCurrencyID)
-    local ch = { categories = {}, listed = {} }
+-- Names of the character's non-header skill lines (professions, secondary skills, weapons, ...). Challenge
+-- categories whose name equals one of these are treated as "mine" in summary mode. Matching is by the localized
+-- name string only: the mirror has no constant mapping skill lines to challenge categories (heuristic, stated in
+-- the report). Same APIs as Collectors/Skills.lua (SkillInfoDocumentation.lua:41,59; SkillsFrame.lua:153-154).
+local function readSkillNames(self)
+    local skills = { names = {}, rows = {} }
+    skills.count = self:Probe("C_SkillInfo.GetNumSkillLines")
+    local count = self:Val(skills.count)
+    if type(count) ~= "number" or count < 0 or count ~= math.floor(count) then
+        skills.state = self:State("not_collected",
+            "skill line list unreadable; profession categories cannot be matched, only the class category is detailed")
+        return skills
+    end
+    for index = 1, math.min(count, 80) do
+        local row = self:Probe("C_SkillInfo.GetSkillLineInfo", index)
+        skills.rows[index] = row
+        local info = self:Val(row)
+        if type(info) == "table" and info.isHeader ~= true and type(info.name) == "string" and info.name ~= "" then
+            skills.names[info.name] = true
+        end
+    end
+    return skills
+end
+
+local function collectChallenges(self, limits, pointsCurrencyID, full)
+    local ch = { categories = {}, listed = {}, full = full }
+    ch.cap = full and (limits.challengesFull or limits.challenges) or limits.challenges
     ch.categoryList = self:Probe("GetCategoryList")
     local ids = self:Val(ch.categoryList)
     if type(ids) ~= "table" or #ids == 0 then
@@ -365,6 +406,27 @@ local function collectChallenges(self, limits, pointsCurrencyID)
         end
     end
 
+    -- Summary mode details only the player's class category (and children) and the categories named like one of
+    -- the player's skill lines (and their children). Full mode details every category.
+    ch.skills = readSkillNames(self)
+    for _, category in ipairs(ch.categories) do
+        local matched = category.name and ch.skills.names[category.name] or false
+        if matched then
+            category.professionMatch = true
+            ch.professionMatches = (ch.professionMatches or 0) + 1
+        end
+    end
+    local function nearProfession(category)
+        local current, steps = category.id, 0
+        while isNumber(current) and current ~= TOP_LEVEL_CATEGORY and steps < 12 do
+            local entry = byID[current]
+            if entry and entry.professionMatch then return true end
+            current = entry and entry.parent
+            steps = steps + 1
+        end
+        return false
+    end
+
     -- Detail order: the player's class default category and its children first, then the rest in list order.
     local ordered, rest = {}, {}
     for _, category in ipairs(ch.categories) do
@@ -378,9 +440,11 @@ local function collectChallenges(self, limits, pointsCurrencyID)
     for _, category in ipairs(rest) do ordered[#ordered + 1] = category end
 
     for _, category in ipairs(ordered) do
-        if isNumber(category.total) and category.total > 0 then
+        category.relevant = category.priority == true or nearProfession(category)
+        category.detailed = full or category.relevant
+        if category.detailed and isNumber(category.total) and category.total > 0 then
             for index = 1, category.total do
-                if #ch.listed >= limits.challenges then
+                if #ch.listed >= ch.cap then
                     ch.truncated = true
                     break
                 end
@@ -424,7 +488,9 @@ Addon:RegisterCollector("legacy", function(self)
         section.trees[#section.trees + 1] = collectTree(self, spec, limits)
     end
     section.points = collectPoints(self, section)
-    section.challenges = collectChallenges(self, limits, constantNumber("LEGACY_POINTS_TRAIT_CURRENCY_ID"))
+    section.detailFull = isFull(self)
+    section.challenges = collectChallenges(self, limits, constantNumber("LEGACY_POINTS_TRAIT_CURRENCY_ID"),
+        section.detailFull)
     return section
 end, function(self, section, out)
     local limits = Addon.legacyLimits or {}
@@ -432,6 +498,12 @@ end, function(self, section, out)
     out:Add("(Legacy: live read, nothing opened or changed. 'completed' = challenge done on the account; "
         .. "'earned by this character' = wasEarnedByMe)")
     out:Result("observed at (server epoch)", section.observedAt)
+    if section.detailFull then
+        out:Add("상세 수준: 전체 (모든 도전 카테고리의 도전을 나열, 상한 " .. tostring(limits.challengesFull) .. "개)")
+    else
+        out:Add("상세 수준: 요약 (카테고리별 건수 표 + 내 직업/내 전문기술 카테고리의 도전만 자세히; "
+            .. "전체는 설정 창에서 켬)")
+    end
     if section.constants then out:State("Constants.LegacyConsts", section.constants) end
     out:Result("Blizzard_LegacySystem UI addon loaded (informational; reads below do not need it)", section.uiLoaded,
         function(loadedOrLoading, values)
@@ -476,7 +548,7 @@ end, function(self, section, out)
                 .. (reward.truncated and " (TRUNCATED at " .. tostring(limits.rewardLevels) .. ")" or " (complete)"))
             for _, item in ipairs(reward.byLevel) do
                 local marks = {}
-                if item.locked ~= nil then marks[#marks + 1] = "locked=" .. tostring(item.locked) end
+                if item.locked ~= nil then marks[#marks + 1] = "level locked=" .. tostring(item.locked) end
                 if item.isMilestone == true then marks[#marks + 1] = "milestone" end
                 if item.isCapstone == true then marks[#marks + 1] = "capstone" end
                 if isNumber(current) and item.level == current then marks[#marks + 1] = "<- current level" end
@@ -493,7 +565,9 @@ end, function(self, section, out)
                             names[#names + 1] = "+" .. (#list - index + 1) .. " more"
                             break
                         end
-                        local label = "<no name>"
+                        -- name is declared nilable (MajorFactionsDocumentation.lua:335); an item reward whose item
+                        -- data is not cached yet most likely has no name, but that cause is not proven.
+                        local label = "<name not provided (declared nilable; item data may not be cached yet)>"
                         if type(r) == "table" and type(r.name) == "string" then label = self:Clean(r.name) end
                         if type(r) == "table" then
                             local ids = {}
@@ -501,7 +575,11 @@ end, function(self, section, out)
                             if r.spellID then ids[#ids + 1] = "spell " .. tostring(r.spellID) end
                             if r.mountID then ids[#ids + 1] = "mount " .. tostring(r.mountID) end
                             if r.isAccountUnlock == true then ids[#ids + 1] = "account unlock" end
-                            if r.isCollected ~= nil then ids[#ids + 1] = "collected=" .. tostring(r.isCollected) end
+                            -- isCollected is a property of the REWARD itself (for example an already collected
+                            -- item/appearance, MajorFactionsDocumentation.lua:338), not "this level was reached".
+                            if r.isCollected ~= nil then
+                                ids[#ids + 1] = "reward already collected=" .. tostring(r.isCollected)
+                            end
                             if #ids > 0 then label = label .. " (" .. table.concat(ids, ", ") .. ")" end
                         end
                         names[#names + 1] = label
@@ -532,8 +610,14 @@ end, function(self, section, out)
             .. (isNumber(earned) and tostring(earned) or (self:Describe(reward.level) or "<not_collected>")))
         out:Add("available (unspent, quantity): " .. self:Fmt(entry.quantity))
         out:Add("spent (committed, pool-wide): " .. self:Fmt(entry.spent))
-        out:Add("maxQuantity (UI tooltip 'seasonal cap'): " .. self:Fmt(entry.maxQuantity))
-        out:Result("max available (GetMaxAvailableTraitCurrency, limitBySourcedMax=false)", points.maxAvailable)
+        -- maxQuantity is declared nilable (SharedTraitsDocumentation.lua:1194). The only upstream reading of a
+        -- currency maxQuantity (Blizzard_TokenUI.lua:540) shows a cap only when it is > 0, so 0/nil is read as
+        -- "no cap reported", NOT as a cap of 0.
+        local cap = entry.maxQuantity
+        out:Add("maxQuantity: " .. self:Fmt(cap) .. ((cap == nil or cap == 0) and " (cap not reported; 0/nil does not "
+            .. "mean the points bar maximum is 0)" or " (cap reported by the tree currency)"))
+        out:Result("max available (GetMaxAvailableTraitCurrency, limitBySourcedMax=false; the UI's points bar "
+            .. "maximum; relation to maxQuantity not proven)", points.maxAvailable)
         if points.stagedEntry and (points.stagedEntry.quantity ~= entry.quantity
             or points.stagedEntry.spent ~= entry.spent) then
             out:Add("staged (unapplied) view differs: available=" .. self:Fmt(points.stagedEntry.quantity) .. " spent="
@@ -643,6 +727,11 @@ end, function(self, section, out)
         .. tostring(ch.defaultCategoryID or "<not_collected: no class/constant match>"))
     out:Add("categories: " .. #ch.categories .. " read of " .. ch.categoryTotal
         .. (ch.categoriesTruncated and " (TRUNCATED)" or " (complete)"))
+    if not ch.full then
+        local skillTag = ch.skills and ch.skills.state and self:Describe(ch.skills.state)
+        out:Add("내 전문기술/기술 이름과 일치한 카테고리: " .. tostring(ch.professionMatches or 0)
+            .. "개 (이름 문자열 일치 방식, 같은 이름이 아니면 못 찾음)" .. (skillTag and (" " .. skillTag) or ""))
+    end
     for _, category in ipairs(ch.categories) do
         local infoTag, countTag = self:Describe(category.info), self:Describe(category.counts)
         local text = "- category " .. category.id .. " " .. (category.name and ('"' .. self:Clean(category.name) .. '"')
@@ -654,10 +743,13 @@ end, function(self, section, out)
                 .. " incomplete=" .. self:Fmt(category.incomplete) .. " listed=" .. category.listed
         end
         if category.priority then text = text .. " [class default tree]" end
+        if category.professionMatch then text = text .. " [my skill]" end
+        if not category.detailed then text = text .. " [counts only]" end
         out:Add(text)
     end
-    out:Add("challenge detail: " .. #ch.listed .. " listed (cap " .. tostring(limits.challenges)
-        .. ", class default category first)"
+    out:Add("challenge detail: " .. #ch.listed .. " listed (cap " .. tostring(ch.cap)
+        .. ", class default category first" .. (ch.full and "" or "; categories marked [counts only] are not listed")
+        .. ")"
         .. (ch.truncated and " -- TRUNCATED: more challenges exist; see per-category listed vs total" or " (complete)"))
     local earnedMe, otherChar, incomplete, unknown = 0, 0, 0, 0
     for _, entry in ipairs(ch.listed) do

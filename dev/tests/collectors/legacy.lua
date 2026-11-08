@@ -123,15 +123,15 @@ Tests["collector.legacy.full_read"] = function()
         local text = run()
         has(text, "faction ID: 900")
         has(text, "renown level: 2")
-        has(text, "level 2 [locked=false, milestone, <- current level]")
-        has(text, "level 3 [locked=true, capstone, <- next reward]: Big Mount (mount 77, account unlock, collected=false)")
+        has(text, "level 2 [level locked=false, milestone, <- current level]")
+        has(text, "level 3 [level locked=true, capstone, <- next reward]: Big Mount (mount 77, account unlock, reward already collected=false)")
         has(text, "track levels: 3 total, 3 listed (complete)")
         has(text, "pool: traitCurrencyID 700 (read from tree PROFESSIONS; matches LEGACY_POINTS_TRAIT_CURRENCY_ID)")
         has(text, "earned (UI shows renown level as points): 2")
         has(text, "available (unspent, quantity): 5")
         has(text, "spent (committed, pool-wide): 4")
-        has(text, "maxQuantity (UI tooltip 'seasonal cap'): 16")
-        has(text, "max available (GetMaxAvailableTraitCurrency, limitBySourcedMax=false): 16")
+        has(text, "maxQuantity: 16 (cap reported by the tree currency)")
+        has(text, "relation to maxQuantity not proven): 16")
         -- source keys stay separate from display names
         has(text, "tree PROFESSIONS [display=Professions Name] treeID=11 configID=110")
         has(text, "tree ADVENTURE [display=Adventure Name] treeID=12 configID=120")
@@ -144,8 +144,18 @@ Tests["collector.legacy.full_read"] = function()
     end)
 end
 
+-- Full detail needs Addon.detail.legacy = true; the default (summary) is covered by the tests further down.
+local function withDetail(value, fn)
+    local addon = AddonUnderTest
+    local saved = addon.detail
+    addon.detail = value
+    local ok, err = pcall(fn)
+    addon.detail = saved
+    assert(ok, err)
+end
+
 Tests["collector.legacy.challenges_account_vs_character"] = function()
-    WithGlobals(fixture(), function()
+    withDetail({ legacy = true }, function() WithGlobals(fixture(), function()
         local text = run()
         has(text, "category 502 \"Hunter\" parent=500 total=3 complete=1 incomplete=2 listed=3 [class default tree]")
         has(text, "default category ID for class: 502")
@@ -160,24 +170,25 @@ Tests["collector.legacy.challenges_account_vs_character"] = function()
         has(text, "2: Visit | not done")
         lacks(text, "raw count")
         has(text, "7100")
-    end)
+        has(text, "상세 수준: 전체")
+    end) end)
 end
 
 Tests["collector.legacy.class_default_listed_first_and_cap_marks_truncation"] = function()
     local addon = AddonUnderTest
-    local saved = addon.legacyLimits.challenges
-    addon.legacyLimits.challenges = 2
+    local saved = addon.legacyLimits.challengesFull
+    addon.legacyLimits.challengesFull = 2
     local ok, err = pcall(function()
-        WithGlobals(fixture(), function()
+        withDetail({ legacy = "full" }, function() WithGlobals(fixture(), function()
             local text = run()
             has(text, "challenge detail: 2 listed (cap 2")
             has(text, "TRUNCATED")
             has(text, "[7001]")
             lacks(text, "[7100]")
             has(text, "listed=2")
-        end)
+        end) end)
     end)
-    addon.legacyLimits.challenges = saved
+    addon.legacyLimits.challengesFull = saved
     assert(ok, err)
 end
 
@@ -287,4 +298,60 @@ Tests["collector.legacy.never_calls_state_changing_apis"] = function()
     mocks.C_AddOns.LoadAddOn = function() called[#called + 1] = "C_AddOns.LoadAddOn" end
     WithGlobals(mocks, function() run() end)
     assert(#called == 0, "state-changing API called: " .. table.concat(called, ","))
+end
+
+Tests["collector.legacy.summary_details_only_class_and_my_skills"] = function()
+    local mocks = fixture()
+    -- the character has a skill named like category 503 ("General") -> that category is also detailed
+    mocks.C_SkillInfo = {
+        GetNumSkillLines = function() return 2 end,
+        GetSkillLineInfo = function(i)
+            if i == 1 then return { name = "Header", isHeader = true, skillID = 1 } end
+            return { name = "General", isHeader = false, skillID = 2 }
+        end,
+    }
+    withDetail(nil, function() WithGlobals(mocks, function()
+        local text = run()
+        has(text, "상세 수준: 요약")
+        has(text, "category 503 \"General\"")
+        has(text, "[my skill]")
+        has(text, "[7001]")
+        has(text, "[7100]")
+        has(text, "내 전문기술/기술 이름과 일치한 카테고리: 1개")
+        lacks(text, "category 502 \"Hunter\" parent=500 total=3 complete=1 incomplete=2 listed=3 [class default tree] [counts only]")
+    end) end)
+end
+
+Tests["collector.legacy.summary_lists_unmatched_categories_as_counts_only"] = function()
+    withDetail({}, function() WithGlobals(fixture(), function()
+        local text, section = run()
+        -- no skill API in the fixture: only the class category is detailed, 503 shows counts only
+        has(text, "category 503 \"General\" parent=-1 total=1 complete=0 incomplete=1 listed=0 [counts only]")
+        has(text, "[7003]")
+        lacks(text, "[7100]")
+        has(text, "skill line list unreadable")
+        assert(section.challenges.full == false)
+    end) end)
+end
+
+Tests["collector.legacy.major_faction_struct_with_function_member_is_read_by_field"] = function()
+    local mocks = fixture()
+    mocks.C_MajorFactions.GetMajorFactionData = function()
+        return { name = "Legacy", isUnlocked = true, renownLevel = 2, maxLevel = 3, renownReputationEarned = 10,
+            renownLevelThreshold = 100, factionFontColor = { GetRGB = function() end }, highlights = { { title = "x" } } }
+    end
+    WithGlobals(mocks, function()
+        local text, section = run()
+        assert(section.reward.data.status == "ok", text)
+        has(text, "faction data: name=Legacy isUnlocked=true renownLevel=2 maxLevel=3 progress=10/100")
+    end)
+end
+
+Tests["collector.legacy.major_faction_secret_field_is_restricted"] = function()
+    local mocks = fixture()
+    mocks.C_MajorFactions.GetMajorFactionData = function() return { name = FCE_SECRET } end
+    WithGlobals(mocks, function()
+        local _, section = run()
+        assert(section.reward.data.status == "restricted")
+    end)
 end

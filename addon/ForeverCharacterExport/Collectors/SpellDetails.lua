@@ -5,12 +5,10 @@ local _, Addon = ...
 -- stats / use spell of the equipped items. Research doc candidates 06 and 09. Read-only: no data request, no
 -- SpellMixin load, no tooltip, no state change.
 --
--- OPT-IN DETAIL LEVEL. Default is a compact summary (counts + the first COMPACT_SPELLS spells, no description
--- text). Full text is emitted only when `Addon.detail.spelldetails` is true (or the string "full"):
---     Addon.detail = Addon.detail or {}; Addon.detail.spelldetails = true
--- `Addon` is this file's private namespace table (`local _, Addon = ...`); nothing exposes it as a global, so the
--- owner cannot set the flag from /run today. A shared change is needed (for example a `/fce detail spelldetails`
--- subcommand in UI.lua that sets it). nil / a non-table `Addon.detail` / any other value means compact.
+-- OPT-IN DETAIL LEVEL. Default is a compact summary (counts + COMPACT_SPELLS spells, active spells first, no
+-- description text). Full text is emitted only when `Addon.detail.spelldetails` is true (or the string "full"),
+-- which the settings window (UI.lua) sets from ForeverCharacterExportDB.detail. nil / a non-table `Addon.detail` /
+-- any other value means compact.
 --
 -- Evidence (paths under references/upstream/Interface/AddOns/):
 --  Spell list (same walk as Collectors/Spells.lua):
@@ -66,6 +64,15 @@ local SLOTS = {
 local function isNumber(v)
     return type(v) == "number"
 end
+
+-- SPELL_TEXT_UPDATE(spellID): SpellDocumentation.lua:1141-1149 (SynchronousEvent, payload spellID). The API docs name
+-- it as the signal that a description that read as "" has loaded (SpellDocumentation.lua:358). Nothing in
+-- references/upstream says that reading an empty description REQUESTS the load, so no automatic retry is done:
+-- the event is only counted, and the report asks the player to export again after it has fired.
+Addon.spellTextUpdates = 0
+Addon:On("SPELL_TEXT_UPDATE", function(self)
+    self.spellTextUpdates = (self.spellTextUpdates or 0) + 1
+end)
 
 local function playerBank()
     local banks = type(Enum) == "table" and Enum.SpellBookSpellBank
@@ -203,6 +210,14 @@ local function readSlot(self, entry)
     if not isNumber(itemID) then
         if returnedNothing(item.link) and (item.itemIDRead == nil or returnedNothing(item.itemIDRead)) then
             item.occupied = false
+            -- Both reads returned nothing for a resolved slot: that is how an empty slot reads (same rule as
+            -- Collectors/Equipment.lua), so the two reads are `empty`, not unread values in the coverage list.
+            for _, result in ipairs({ item.link, item.itemIDRead or false }) do
+                if result then
+                    result.status = "empty"
+                    result.reason = "slot has no item (GetInventoryItem* returned nothing for a valid slot)"
+                end
+            end
         end
         return item
     end
@@ -267,6 +282,23 @@ Addon:RegisterCollector("spelldetails", function(self)
         if list then
             section.spellTotal = #list
             section.spells = {}
+            local activeCount = 0
+            for _, entry in ipairs(list) do
+                if not entry.passive then activeCount = activeCount + 1 end
+            end
+            section.activeTotal, section.passiveTotal = activeCount, #list - activeCount
+            if not full then
+                -- Compact mode: active spells first (spellbook order kept inside each group), passives only fill
+                -- what is left of the limit. Full mode keeps the plain spellbook order.
+                local ordered = {}
+                for _, entry in ipairs(list) do
+                    if not entry.passive then ordered[#ordered + 1] = entry end
+                end
+                for _, entry in ipairs(list) do
+                    if entry.passive then ordered[#ordered + 1] = entry end
+                end
+                list = ordered
+            end
             for index = 1, math.min(#list, limit) do
                 local entry = list[index]
                 readSpellFields(self, probe, entry)
@@ -298,8 +330,8 @@ end, function(self, section, out)
     if full then
         out:Add("상세 수준: 전체 (주문 설명 최대 " .. DESC_MAX .. "바이트, 주문 최대 " .. section.limit .. "개)")
     else
-        out:Add("상세 수준: 요약 (기본; 설명 본문은 생략하고 처음 " .. section.limit .. "개 주문만 표시)")
-        out:Add("전체 보기: Addon.detail.spelldetails = true (Collectors/SpellDetails.lua 머리 주석 참고)")
+        out:Add("상세 수준: 요약 (기본; 설명 본문은 생략하고 능동 주문 우선으로 " .. section.limit .. "개만 표시)")
+        out:Add("전체 보기: 설정 창의 '상세 수준'에서 spelldetails를 '전체'로 바꾸세요")
     end
     out:Add("참고: castTime/minRange/maxRange는 API 원시 숫자이며 단위는 문서에 없음")
     local missing = {}
@@ -332,6 +364,15 @@ end, function(self, section, out)
             marker = "불완전(incomplete): 읽지 못한 슬롯/분류 " .. gaps .. "개"
         end
         out:Add("표시 " .. shown .. " / 전체 " .. section.spellTotal .. " — " .. marker)
+        if section.activeTotal then
+            local activeShown = 0
+            for _, entry in ipairs(section.spells) do
+                if not entry.passive then activeShown = activeShown + 1 end
+            end
+            out:Add("능동 " .. section.activeTotal .. "개 / 패시브 " .. (section.passiveTotal or 0)
+                .. "개 중 표시한 능동 " .. activeShown .. "개, 패시브 " .. (shown - activeShown) .. "개"
+                .. (full and "" or " (요약은 능동을 먼저 고름)"))
+        end
         local loaded, notLoaded = 0, 0
         for _, entry in ipairs(section.spells) do
             if entry.description and entry.description.status == "ok" then loaded = loaded + 1
@@ -340,6 +381,10 @@ end, function(self, section, out)
         end
         if not missing["C_Spell.GetSpellDescription"] then
             out:Add("설명 읽음 " .. loaded .. " / 미로딩(빈 문자열) " .. notLoaded .. " / 표시된 " .. shown .. "개 기준")
+            if notLoaded > 0 then
+                out:Add("미로딩 설명이 있음: 잠시 뒤 다시 내보내면 읽힐 수 있음 (SPELL_TEXT_UPDATE 로그인 후 수신 "
+                    .. tostring(Addon.spellTextUpdates or 0) .. "회; 자동 재시도는 근거가 없어 하지 않음)")
+            end
         end
         for _, entry in ipairs(section.spells) do
             local name = entry.name and entry.name ~= "" and self:Clean(entry.name) or "<not_collected: 이름 없음>"

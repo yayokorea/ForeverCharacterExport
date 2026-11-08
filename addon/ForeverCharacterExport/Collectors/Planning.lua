@@ -91,6 +91,14 @@ local ITEM_SLOTS = {
 
 local F = {} -- per-block formatters, defined at the end of the file
 
+-- Detail level of the printed text. Collection always reads everything (coverage stays honest); only the flyout
+-- text differs. Full when Addon.detail.planning is true or "full" (set from the settings window).
+local function isFull(self)
+    local detail = self.detail
+    if type(detail) ~= "table" then return false end
+    return detail.planning == true or detail.planning == "full"
+end
+
 local function isNumber(v)
     return type(v) == "number"
 end
@@ -677,6 +685,8 @@ end
 function F.trainer(self, block, out, title)
     if block.open == false then
         head(self, out, title, block, "창 안 열림")
+        out:Add("  안내: 상급자(직업 교관) 창을 연 채로 내보내면 이 블록이 채워짐. 이 블록이 쓰는 GetNumTrainerServices/"
+            .. "C_Trainer.GetTrainerType/TRAINER_SHOW는 upstream에 없어 이 빌드에 있는지 게임에서 확인 필요")
         return
     end
     local unit = "금액 단위 미확인"
@@ -818,6 +828,7 @@ function F.equipmentSets(self, block, out, title)
 end
 
 function F.flyouts(self, block, out, title)
+    local full = isFull(self)
     head(self, out, title, block, "주문서에서 찾은 flyout만. 행동 단축바 flyout은 근거 부족으로 미조사")
     if block.spellbookState then
         out:Add("  주문서 읽기: " .. (self:Describe(block.spellbookState) or "ok"))
@@ -845,9 +856,13 @@ function F.flyouts(self, block, out, title)
         else
             out:Add(line .. " 알려짐(isKnown)=" .. self:Fmt(flyout.isKnown) .. " 칸=" .. self:Fmt(flyout.numSlots)
                 .. (flyout.slotsTruncated and " (칸 상한 도달, truncated)" or ""))
+            local hidden = 0
             for _, slot in ipairs(flyout.slots) do
                 local slotTag = self:Describe(slot.info)
-                if slotTag then
+                if not full and not slotTag and slot.info.values[3] == false then
+                    -- Summary: a slot the player has not learned (isKnownSlot == false) is only counted.
+                    hidden = hidden + 1
+                elseif slotTag then
                     out:Add("      " .. slot.index .. ": " .. slotTag)
                 else
                     local v = slot.info.values
@@ -857,6 +872,9 @@ function F.flyouts(self, block, out, title)
                     if v[5] ~= nil and v[5] ~= 0 then text = text .. " specID=" .. self:Fmt(v[5]) end
                     out:Add(text)
                 end
+            end
+            if hidden > 0 then
+                out:Add("      (배우지 않은 칸 " .. hidden .. "개는 요약에서 개수만 표시; 전체 모드에서 나열)")
             end
         end
     end

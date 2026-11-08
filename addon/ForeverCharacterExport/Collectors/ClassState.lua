@@ -394,7 +394,10 @@ end, function(self, section, out)
                     else
                         local seconds = type(enchant.timeLeft) == "number" and math.floor(enchant.timeLeft / 1000)
                         local typeName = enumName("ItemEnchantType", enchant.enchantType)
-                        out:Add(label .. ": hasEnchant=" .. self:Fmt(enchant.hasEnchant) .. " enchantType="
+                        -- One C_Item.GetWeaponEnchantInfo(slot) call returned several entries (the UI loops over
+                        -- them: BuffFrame.lua:766); this is not a second read of the same slot.
+                        local entryLabel = #keys > 1 and (label .. " [항목 " .. position .. "/" .. #keys .. "]") or label
+                        out:Add(entryLabel .. ": hasEnchant=" .. self:Fmt(enchant.hasEnchant) .. " enchantType="
                             .. self:Fmt(enchant.enchantType) .. (typeName and (" (" .. typeName .. ")") or "")
                             .. " enchantID=" .. self:Fmt(enchant.enchantID) .. " charges=" .. self:Fmt(enchant.charges)
                             .. " timeLeft(raw)=" .. self:Fmt(enchant.timeLeft)
@@ -407,6 +410,8 @@ end, function(self, section, out)
         if not weapon.complete then
             out:Add("(잘림: " .. #weapon.slots .. "/" .. weapon.total .. " 슬롯만 읽음)")
         end
+        out:Add("(슬롯마다 API를 1번만 호출함. 한 슬롯에 항목이 여러 개로 나오면 API가 항목 여러 개를 반환한 것이며 "
+            .. "어느 항목이 무엇인지는 문서에 없음. BuffFrame.lua:766은 항목 전부를 순회함)")
         out:Add("(timeLeft 단위: BuffFrame.lua:775가 /1000 하므로 밀리초로 추정. 게임 UI와 대조 필요. "
             .. "hasEnchant=false 항목은 강화 없음)")
     end

@@ -107,7 +107,7 @@ Tests["collector.spelldetails.compact_default_has_no_description_text"] = functi
         local text, section = run(false)
         assert(section.detail == "compact")
         has(text, "상세 수준: 요약")
-        has(text, "Addon.detail.spelldetails = true")
+        has(text, "설정 창의 '상세 수준'")
         -- Unique spell IDs 1, 2, 3 (ID 3 repeated once, flyout / future / off-spec only counted).
         has(text, "고유 주문 3개")
         has(text, "중복 ID 1")
@@ -340,4 +340,64 @@ Tests["collector.spelldetails.unusable_skill_line_count_is_an_error_not_zero_spe
             lacks(text, "완전(complete)")
         end)
     end
+end
+
+-- fixture() plus a spellbook that serves any slot (the stock fixture asserts slot < 8).
+local function bigBook(items, size)
+    local mocks = fixture()
+    mocks.C_SpellBook = {
+        GetNumSpellBookSkillLines = function() return 1 end,
+        GetSpellBookSkillLineInfo = function()
+            return { name = "All", iconID = 1, itemIndexOffset = 0, numSpellBookItems = size, shouldHide = false }
+        end,
+        GetSpellBookItemInfo = function(slot) return items[slot] end,
+    }
+    mocks.C_Spell.GetSpellDescription = function() return "text" end
+    return mocks
+end
+
+Tests["collector.spelldetails.compact_picks_active_spells_before_passives"] = function()
+    local items = {}
+    for i = 1, 8 do items[i] = spell("Passive " .. i, 100 + i, { isPassive = true }) end
+    items[9] = spell("Active A", 200)
+    items[10] = spell("Active B", 201)
+    WithGlobals(bigBook(items, 10), function()
+        local text, section = run(false)
+        assert(section.activeTotal == 2 and section.passiveTotal == 8)
+        local first = string.find(text, "Active A", 1, true)
+        local firstPassive = string.find(text, "Passive 1", 1, true)
+        assert(first and firstPassive and first < firstPassive, text)
+        has(text, "능동 2개 / 패시브 8개 중 표시한 능동 2개, 패시브 8개")
+    end)
+end
+
+Tests["collector.spelldetails.compact_truncation_prefers_active"] = function()
+    local items = {}
+    for i = 1, 12 do items[i] = spell("Passive " .. i, 100 + i, { isPassive = true }) end
+    items[13] = spell("Last Active", 300)
+    WithGlobals(bigBook(items, 13), function()
+        local text = run(false)
+        has(text, "Last Active")
+        has(text, "표시 10 / 전체 13")
+        has(text, "패시브 9개")
+    end)
+end
+
+Tests["collector.spelldetails.empty_equipment_slot_is_empty_not_unread"] = function()
+    WithGlobals(fixture(), function()
+        local _, section = run(false)
+        local counts = AddonUnderTest:Tally(section)
+        local problems = select(2, AddonUnderTest:Tally(section))
+        for _, p in ipairs(problems) do
+            assert(p.status == "empty" or (p.api ~= "GetInventoryItemLink" and p.api ~= "GetInventoryItemID"),
+                "empty slot reads must not be unread values: " .. tostring(p.api) .. " " .. tostring(p.status))
+        end
+        assert(counts.empty > 0)
+    end)
+end
+
+Tests["collector.spelldetails.spell_text_update_is_counted"] = function()
+    local before = AddonUnderTest.spellTextUpdates
+    AddonUnderTest.Dispatch(nil, "SPELL_TEXT_UPDATE", 123)
+    assert(AddonUnderTest.spellTextUpdates == before + 1)
 end

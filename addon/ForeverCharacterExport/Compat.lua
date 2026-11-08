@@ -59,7 +59,10 @@ function Addon:Failure(value)
     return self:State("error", type(value) == "string" and value or "non-string error")
 end
 
-function Addon:Probe(path, ...)
+-- Shared by Probe and ProbeFields. fields == nil copies every return value whole; fields = { "name", ... } copies
+-- only those keys of the FIRST return (a table). The other keys are never read, so a struct that also carries
+-- function/userdata members (for example a mixin-style color object) does not fail the whole read.
+local function probeInternal(self, path, fields, ...)
     local fn = _G
     for part in string.gmatch(path, "[^.]+") do
         if type(fn) ~= "table" then
@@ -80,7 +83,21 @@ function Addon:Probe(path, ...)
     end
     local arguments = pack(...)
     local ok, values = pcall(function()
-        return copy(pack(fn(unpack(arguments, 1, arguments.n))), {}, 0, { count = 0 })
+        local returned = pack(fn(unpack(arguments, 1, arguments.n)))
+        if fields then
+            local first = returned[1]
+            if not accessible(first) then
+                error("FCE_RESTRICTED", 0)
+            end
+            if type(first) == "table" then
+                local picked = {}
+                for _, key in ipairs(fields) do
+                    picked[key] = copy(first[key], {}, 1, { count = 0 })
+                end
+                returned[1] = picked
+            end
+        end
+        return copy(returned, {}, 0, { count = 0 })
     end)
     local result
     if ok then
@@ -96,6 +113,15 @@ function Addon:Probe(path, ...)
     end
     result.api = path
     return result
+end
+
+function Addon:Probe(path, ...)
+    return probeInternal(self, path, nil, ...)
+end
+
+-- Probe that keeps only the listed scalar fields of the first (table) return value.
+function Addon:ProbeFields(path, fields, ...)
+    return probeInternal(self, path, fields, ...)
 end
 
 function Addon:First(result)

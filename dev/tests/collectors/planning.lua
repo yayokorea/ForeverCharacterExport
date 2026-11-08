@@ -2,11 +2,19 @@
 -- luacheck: read globals GetTime
 local Addon = AddonUnderTest
 
-local function run()
-    local section = Addon.collectors.planning(Addon)
-    local out = Addon:NewWriter()
-    Addon.formatters.planning(Addon, section, out)
-    return out:Output(), section
+-- full = true prints every flyout slot (Addon.detail.planning); the default is the summary.
+local function run(full)
+    local saved = Addon.detail
+    Addon.detail = full and { planning = true } or nil
+    local ok, text, section = pcall(function()
+        local collected = Addon.collectors.planning(Addon)
+        local out = Addon:NewWriter()
+        Addon.formatters.planning(Addon, collected, out)
+        return out:Output(), collected
+    end)
+    Addon.detail = saved
+    if not ok then error(text, 0) end
+    return text, section
 end
 
 local function has(text, needle)
@@ -133,7 +141,7 @@ end
 Tests["collector.planning.normal"] = function()
     WithGlobals(mock(), function()
         withTrainer(true, function()
-            local text, section = run()
+            local text, section = run(true)
             -- trainer
             has(text, "### 상급자 가르침 목록 (12) [완전성: 미확인 - list may be narrowed")
             has(text, "Spell 1 | type=available | reqLevel=10 | sub=Rank 1 | category=Category")
@@ -491,4 +499,20 @@ Tests["collector.planning.registered_and_ordered"] = function()
     local found
     for _, name in ipairs(Addon.order) do if name == "planning" then found = true end end
     assert(found)
+end
+
+Tests["collector.planning.flyout_summary_lists_learned_slots_and_counts_the_rest"] = function()
+    WithGlobals(mock(), function()
+        local text = run(false)
+        has(text, "1: Freezing Trap spellID=1001 overrideSpellID=1002 배움(isKnownSlot)=true")
+        lacks(text, "2: Explosive Trap")
+        has(text, "배우지 않은 칸 1개는 요약에서 개수만 표시")
+    end)
+end
+
+Tests["collector.planning.trainer_closed_tells_the_player_what_to_do"] = function()
+    WithGlobals(mock(), function()
+        local text = run(false)
+        has(text, "상급자(직업 교관) 창을 연 채로 내보내면")
+    end)
 end
