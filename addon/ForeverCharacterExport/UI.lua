@@ -26,8 +26,9 @@ local _, Addon = ...
 --  * Fonts are default font objects only (GameFontNormal, GameFontNormalSmall, GameFontHighlightSmall,
 --    ChatFontNormal; all referenced by upstream XML), so Korean text renders with the client's own font.
 
-local WINDOW = { width = 900, height = 660, minWidth = 780, minHeight = 640, maxWidth = 1700, maxHeight = 1300 }
-local LEFT_WIDTH, ROW_HEIGHT, TOP = 424, 21, 44
+local WINDOW = { width = 1060, height = 660, minWidth = 920, minHeight = 640, maxWidth = 1700, maxHeight = 1300 }
+local LEFT_WIDTH, ROW_HEIGHT, TOP = 540, 21, 44
+local STATUS_X, STATUS_WIDTH = 224, 200
 local EDIT_X = LEFT_WIDTH + 24
 local COLORS = {
     ok = { 0.35, 1, 0.35 }, warn = { 1, 0.82, 0 }, unsupported = { 1, 0.45, 0.45 }, error = { 1, 0.25, 0.25 },
@@ -139,7 +140,7 @@ local function buildRows(self, frame, ui)
     local header = makeLabel(frame, "GameFontNormal", "구역 선택")
     header:SetPoint("TOPLEFT", 16, -TOP)
     local statusHeader = makeLabel(frame, "GameFontNormalSmall", "마지막 수집 상태")
-    statusHeader:SetPoint("TOPLEFT", 196, -TOP - 22)
+    statusHeader:SetPoint("TOPLEFT", STATUS_X, -TOP - 22)
     local detailHeader = makeLabel(frame, "GameFontNormalSmall", "상세 수준")
     detailHeader:SetPoint("TOPLEFT", LEFT_WIDTH - 130, -TOP - 22)
     local allOn = makeButton(frame, "모두 켜기", 78, 20)
@@ -166,7 +167,9 @@ local function buildRows(self, frame, ui)
         end)
         row.toggle.frame:SetPoint("TOPLEFT", 12, y + 2)
         row.status = makeLabel(frame, "GameFontNormalSmall", "-")
-        row.status:SetPoint("TOPLEFT", 196, y - 4)
+        row.status:SetPoint("TOPLEFT", STATUS_X, y - 4)
+        row.status:SetWidth(STATUS_WIDTH)
+        row.status:SetJustifyH("LEFT")
         if detailSet[name] then
             row.detail = makeButton(frame, "요약", 60, 19)
             row.detail:SetPoint("TOPLEFT", LEFT_WIDTH - 130, y + 1)

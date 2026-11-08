@@ -14,7 +14,7 @@ Addon.sectionLabels = {
     spells = "주문서", pet = "소환수", actionbars = "행동 단축바", skills = "기술", reputation = "평판",
     currency = "화폐/명예", auras = "버프/디버프", flightpaths = "비행 경로", addons = "애드온",
     legacy = "유산(Legacy)", classstate = "직업 상태", combatdetails = "전투 상세", professions = "전문기술 제작",
-    spelldetails = "주문 상세", planning = "계획(상급자/세트/flyout/쿨다운/PvP)",
+    spelldetails = "주문 상세", planning = "계획(상급자/쿨다운/PvP)",
 }
 
 -- Sections with a summary/full switch. Each collector or formatter reads Addon.detail[name] (true or "full" = full).

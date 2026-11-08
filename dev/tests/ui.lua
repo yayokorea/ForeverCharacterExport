@@ -223,7 +223,7 @@ Tests["ui.window_geometry_is_saved_and_restored"] = function()
         again.width = 900
         grip.scripts.OnMouseUp(grip)
         assert(Addon.db.window.width == 900 and not again.sizing)
-        assert(Addon.ui.edit.width == 900 - (424 + 24) - 56, "result box follows the window width")
+        assert(Addon.ui.edit.width == 900 - (540 + 24) - 56, "result box follows the window width")
     end)
 end
 
@@ -232,7 +232,7 @@ Tests["ui.bad_saved_geometry_falls_back_to_defaults"] = function()
         window = { point = "TOP", x = "a", y = 0 / 0, width = 5, height = "x" } } }, function()
         local frame = Addon:BuildWindow()
         assert(frame.points[1][1] == "CENTER")
-        assert(frame.width == 780 and frame.height == 660, "width clamped to the minimum, bad height ignored")
+        assert(frame.width == 920 and frame.height == 660, "width clamped to the minimum, bad height ignored")
     end)
 end
 
