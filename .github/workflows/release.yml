@@ -27,7 +27,7 @@ jobs:
 
       - name: Build zip
         run: |
-          zip_name="ForeverCharacterExport-${GITHUB_REF_NAME}.zip"
+          zip_name="ForeverCharacterExport-${GITHUB_REF_NAME#v}.zip"
           (cd addon && zip -r "../${zip_name}" ForeverCharacterExport -x '*.DS_Store')
           echo "ZIP_NAME=${zip_name}" >> "$GITHUB_ENV"
 
@@ -76,7 +76,7 @@ jobs:
           case "$GITHUB_REF_NAME" in *-*) release_type=beta ;; esac
           metadata=$(jq -n \
             --rawfile changelog release-notes.md \
-            --arg name "$GITHUB_REF_NAME" \
+            --arg name "$ZIP_NAME" \
             --arg type "$release_type" \
             --argjson gv "$CF_GAME_VERSION_ID" \
             '{changelog: $changelog, changelogType: "markdown", displayName: $name, gameVersions: [$gv], releaseType: $type}')
