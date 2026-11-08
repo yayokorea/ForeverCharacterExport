@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag matches TOC version
+        run: |
+          toc_version=$(grep -m1 '^## Version:' addon/ForeverCharacterExport/ForeverCharacterExport.toc | sed 's/^## Version:[[:space:]]*//' | tr -d '\r')
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$toc_version" != "$tag_version" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match TOC version ${toc_version}"
+            exit 1
+          fi
+
+      - name: Build zip
+        run: |
+          zip_name="ForeverCharacterExport-${GITHUB_REF_NAME}.zip"
+          (cd addon && zip -r "../${zip_name}" ForeverCharacterExport -x '*.DS_Store')
+          echo "ZIP_NAME=${zip_name}" >> "$GITHUB_ENV"
+
+      - name: Generate release notes from git log
+        run: |
+          prev_tag=$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          if [ -n "$prev_tag" ]; then
+            range="${prev_tag}..${GITHUB_REF_NAME}"
+          else
+            range="${GITHUB_REF_NAME}"
+          fi
+          {
+            echo "## What's Changed"
+            echo
+            git log "$range" --no-merges --pretty='format:- %s (%h)'
+            echo
+            if [ -n "$prev_tag" ]; then
+              echo
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${prev_tag}...${GITHUB_REF_NAME}"
+            fi
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=""
+          case "$GITHUB_REF_NAME" in *-*) flags="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" "$ZIP_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            $flags
+
+      - name: Upload to CurseForge
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          CF_PROJECT_ID: "1787685"
+          CF_GAME_VERSION_ID: "17053" # WoW Forever 1.60.1
+        run: |
+          if [ -z "$CF_API_KEY" ]; then
+            echo "CF_API_KEY not set; skipping CurseForge upload."
+            exit 0
+          fi
+          release_type=release
+          case "$GITHUB_REF_NAME" in *-*) release_type=beta ;; esac
+          metadata=$(jq -n \
+            --rawfile changelog release-notes.md \
+            --arg name "$GITHUB_REF_NAME" \
+            --arg type "$release_type" \
+            --argjson gv "$CF_GAME_VERSION_ID" \
+            '{changelog: $changelog, changelogType: "markdown", displayName: $name, gameVersions: [$gv], releaseType: $type}')
+          curl --fail-with-body -sS \
+            -H "X-Api-Token: $CF_API_KEY" \
+            -F "metadata=$metadata" \
+            -F "file=@${ZIP_NAME}" \
+            "https://wow.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file"
