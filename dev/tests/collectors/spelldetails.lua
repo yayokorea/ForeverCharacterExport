@@ -247,7 +247,8 @@ end
 Tests["collector.spelldetails.equipment_compact_counts_stats_and_keeps_item_spell"] = function()
     WithGlobals(fixture(), function()
         local text = run(false)
-        has(text, "장비: 착용 2, 빈 슬롯 1, 확인 불가 16")
+        has(text, "장비: 착용 2, 빈 슬롯 1, 확인 불가 16 — 전체 슬롯 19개 중 확인 불가 16개(불완전)")
+        lacks(text, "모두 확인(완전)")
         has(text, "- 머리: Hunter Helm (id=100), 능력치 2종, 아이템 주문=보고 없음(없거나 미로딩, API는 구분 불가)")
         has(text, "- 장신구 1: Whistle (id=200), 능력치=보고 없음(능력치가 없거나 미로딩, API는 구분 불가), "
             .. "아이템 주문=Call Pet (id=883)")
@@ -310,4 +311,33 @@ Tests["collector.spelldetails.detail_flag_tolerates_garbage"] = function()
     end)
     addon.detail = saved
     if not ok then error(err, 0) end
+end
+
+Tests["collector.spelldetails.unreadable_slot_makes_the_spell_list_incomplete"] = function()
+    local mocks = fixture()
+    local original = mocks.C_SpellBook.GetSpellBookItemInfo
+    mocks.C_SpellBook.GetSpellBookItemInfo = function(slot, bank)
+        if slot == 2 then return { name = FCE_SECRET, spellID = 7 } end
+        return original(slot, bank)
+    end
+    WithGlobals(mocks, function()
+        local text = run(false)
+        has(text, "읽기 실패 1")
+        has(text, "불완전(incomplete): 읽지 못한 슬롯/분류 1개")
+        lacks(text, "— 완전(complete)")
+    end)
+end
+
+Tests["collector.spelldetails.unusable_skill_line_count_is_an_error_not_zero_spells"] = function()
+    for _, bad in ipairs({ -1, 1.5, "x" }) do
+        local mocks = fixture()
+        mocks.C_SpellBook.GetNumSpellBookSkillLines = function() return bad end
+        WithGlobals(mocks, function()
+            local text, section = run(false)
+            assert(section.spells == nil and section.spellTotal == nil)
+            has(text, "주문서: <error: unexpected skill line count")
+            lacks(text, "고유 주문 0개")
+            lacks(text, "완전(complete)")
+        end)
+    end
 end

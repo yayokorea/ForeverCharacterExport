@@ -138,7 +138,7 @@ local function listSpells(self, section, bank)
     section.counts = counts
     local list, seen = {}, {}
     if not isNumber(count) or count < 0 or count ~= math.floor(count) then
-        return list
+        return nil -- unusable count: the list is unknown, not empty
     end
     section.lineErrors = {}
     for index = 1, count do
@@ -264,15 +264,17 @@ Addon:RegisterCollector("spelldetails", function(self)
         section.bank = self:State("unsupported", "Enum.SpellBookSpellBank.Player unavailable at runtime")
     else
         local list = listSpells(self, section, bank)
-        section.spellTotal = #list
-        section.spells = {}
-        for index = 1, math.min(#list, limit) do
-            local entry = list[index]
-            readSpellFields(self, probe, entry)
-            seenDescriptions[entry.spellID] = "주문서"
-            section.spells[index] = entry
+        if list then
+            section.spellTotal = #list
+            section.spells = {}
+            for index = 1, math.min(#list, limit) do
+                local entry = list[index]
+                readSpellFields(self, probe, entry)
+                seenDescriptions[entry.spellID] = "주문서"
+                section.spells[index] = entry
+            end
+            section.spellsTruncated = #list > limit
         end
-        section.spellsTruncated = #list > limit
     end
 
     section.items = {}
@@ -322,8 +324,14 @@ end, function(self, section, out)
             .. ", 주문 아님(전문화창/소환수 등) " .. (c.nonSpell or 0) .. ", 비활성 특성 " .. (c.offSpec or 0)
             .. ", 읽기 실패 " .. (c.unreadable or 0) .. ", 읽지 못한 기술 분류 " .. #(section.lineErrors or {}) .. ")")
         local shown = #section.spells
-        out:Add("표시 " .. shown .. " / 전체 " .. section.spellTotal .. " — "
-            .. (section.spellsTruncated and "잘림(truncated)" or "완전(complete)"))
+        local gaps = (c.unreadable or 0) + #(section.lineErrors or {})
+        local marker = "완전(complete)"
+        if section.spellsTruncated then
+            marker = "잘림(truncated)"
+        elseif gaps > 0 then
+            marker = "불완전(incomplete): 읽지 못한 슬롯/분류 " .. gaps .. "개"
+        end
+        out:Add("표시 " .. shown .. " / 전체 " .. section.spellTotal .. " — " .. marker)
         local loaded, notLoaded = 0, 0
         for _, entry in ipairs(section.spells) do
             if entry.description and entry.description.status == "ok" then loaded = loaded + 1
@@ -389,7 +397,8 @@ end, function(self, section, out)
         else unresolved = unresolved + 1 end
     end
     out:Add("장비: 착용 " .. equipped .. ", 빈 슬롯 " .. empty .. ", 확인 불가 " .. unresolved
-        .. " — 전체 슬롯 " .. #(section.items or {}) .. "개 확인(완전)")
+        .. " — 전체 슬롯 " .. #(section.items or {}) .. "개 중 "
+        .. (unresolved == 0 and "모두 확인(완전)" or ("확인 불가 " .. unresolved .. "개(불완전)")))
     for _, item in ipairs(section.items or {}) do
         local head = "- " .. item.label
         if item.slotID == nil then
