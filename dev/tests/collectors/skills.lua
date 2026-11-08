@@ -218,23 +218,6 @@ Tests["collector.skills.errors_in_one_row_do_not_erase_the_rest"] = function()
     end)
 end
 
-Tests["collector.skills.line_count_is_capped"] = function()
-    local calls = 0
-    WithGlobals({ C_SkillInfo = {
-        GetNumSkillLines = function() return 100000 end,
-        GetSkillLineInfo = function(index)
-            calls = calls + 1
-            return line({ skillID = index + 1000, name = "S" .. index, rank = 1, maxRank = 1 })
-        end,
-        GetSkillLineInfoByID = function() end,
-    } }, function()
-        local text = collectAndRender()
-        check(calls == 500, "loop must stop at the hard cap, got " .. calls)
-        check(has(text, "<not_collected: only first 500 of 100000 lines read>"), text)
-        check(has(text, "coverage: INCOMPLETE"), text)
-    end)
-end
-
 Tests["collector.skills.defense_modifier_uses_unit_defense_skill"] = function()
     local rows = { header(1, "Combat", false), line({ skillID = 95, name = "Defense", rank = 5, maxRank = 5 }) }
     WithGlobals({ C_SkillInfo = mockSkills(rows), UnitDefenseSkill = function() return 5, 12 end }, function()

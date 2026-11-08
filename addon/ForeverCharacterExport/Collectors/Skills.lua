@@ -13,7 +13,6 @@ local _, Addon = ...
 -- children, and ExpandSkillHeader/CollapseSkillHeader would change UI state, so they are never called here.
 -- A collapsed header is therefore reported as not_collected, never as an empty or complete list.
 
-local MAX_LINES = 500
 local DEFENSE_SKILL_ID = 95 -- SkillsFrame.lua:34
 -- SkillsFrame.lua:11-28 (Swords, Axes, Bows, Guns, Maces, 2H Swords, Staves, 2H Maces, 2H Axes, Daggers, Thrown,
 -- Crossbows, Wands, Polearms, Fist/Unarmed, Feral Combat).
@@ -82,7 +81,7 @@ Addon:RegisterCollector("skills", function(self)
         return section
     end
     section.total = total
-    section.read = math.min(total, MAX_LINES)
+    section.read = total
     for index = 1, section.read do
         section.rows[index] = self:Probe("C_SkillInfo.GetSkillLineInfo", index)
     end
@@ -92,7 +91,7 @@ Addon:RegisterCollector("skills", function(self)
         section.defense = self:Probe("UnitDefenseSkill", "player")
     end
     -- A collapsed header (or an unreadable row) can hide weapon skills. Ask for them by ID as a read-only extra check.
-    if #model.collapsed > 0 or #model.unknownCollapse > 0 or #model.unreadable > 0 or total > MAX_LINES then
+    if #model.collapsed > 0 or #model.unknownCollapse > 0 or #model.unreadable > 0 then
         section.byId = {}
         for _, id in ipairs(WEAPON_IDS) do
             if not model.ids[id] then
@@ -142,9 +141,6 @@ end, function(self, section, out)
     -- Coverage first: the reader must know whether this list can be trusted before reading it.
     local read = section.read or 0
     local incomplete = {}
-    if section.total and section.total > read then
-        incomplete[#incomplete + 1] = "<not_collected: only first " .. read .. " of " .. section.total .. " lines read>"
-    end
     for _, group in ipairs(model.collapsed) do incomplete[#incomplete + 1] = collapsedTag(group) end
     for _, group in ipairs(model.unknownCollapse) do
         incomplete[#incomplete + 1] = "<not_collected: header " .. nameOf(group.header)

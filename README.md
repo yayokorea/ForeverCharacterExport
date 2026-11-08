@@ -1,6 +1,6 @@
 # Forever Character Export
 
-One-click export of your character as readable plain text, for **WoW Forever 1.60.1 (build 70790)**.
+One-click export of your character as readable plain text, for **WoW Forever 1.60.1**.
 
 Open it with `/fce` or the minimap button to get a full snapshot of your character.
 

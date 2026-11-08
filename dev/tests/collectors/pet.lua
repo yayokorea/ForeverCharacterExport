@@ -264,24 +264,15 @@ Tests["collector.pet.spell_count_guards"] = function()
     run(api, function(section)
         check(section.spellTraversal.status == "error" and #section.spells == 0, "negative count is an error")
     end)
-    local seen = 0
-    api.C_SpellBook.HasPetSpells = function() return 100000, "PET" end
-    api.C_SpellBook.GetSpellBookItemInfo = function() seen = seen + 1; return row({ name = "x", spellID = 1 }) end
+    api.C_SpellBook.HasPetSpells = function() return 700, "PET" end
+    api.C_SpellBook.GetSpellBookItemInfo = function() return row({ name = "x", spellID = 1 }) end
     run(api, function(section)
-        check(#section.spells == 500 and seen == 500, "hard cap applies")
-        check(section.spellTraversal.status == "not_collected", "truncation is stated")
+        check(#section.spells == 700, "every pet spell is read")
     end)
 end
 
-Tests["collector.pet.stable_slot_count_is_bounded"] = function()
+Tests["collector.pet.stable_slot_count_is_validated"] = function()
     local stable = mocks().C_StableInfo
-    stable.GetNumStableSlots = function() return 100000 end
-    local calls = 0
-    stable.GetStablePetInfo = function() calls = calls + 1 end
-    run({ C_StableInfo = stable }, function(section)
-        check(calls == 20 and #section.stable.pets == 20, "stable traversal is capped")
-        check(section.stable.traversal.status == "not_collected", "truncation is stated")
-    end)
     stable.GetNumStableSlots = function() return -3 end
     run({ C_StableInfo = stable }, function(section)
         check(section.stable.traversal.status == "error" and #section.stable.pets == 1, "invalid count reads slot 1 only")

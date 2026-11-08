@@ -40,7 +40,7 @@ Tests["collector.addons.normal"] = function()
         { "Blizzard_Collections", "Collections", false, "DEMAND_LOADED" },
         { "CharacterExport", "|cff00ff00Character Export|r", true, "", "2.1.0" },
         { "DeadAddon", "Dead", false, "DISABLED", "1.0" },
-        { "ForeverCharacterExport", "ForeverCharacterExport", true, "", "0.2.0" },
+        { "ForeverCharacterExport", "ForeverCharacterExport", true, "", "0.3.0" },
         { "NoVersion", "NoVersion", true },
     }
     WithGlobals({ C_AddOns = api(rows) }, function()
@@ -48,7 +48,7 @@ Tests["collector.addons.normal"] = function()
         has(text, "installed: 7 | running: 5 (third-party 3, Blizzard_* 2 collapsed) | not running: 2")
         has(text, "DEMAND_LOADED=1, DISABLED=1")
         has(text, "- CharacterExport | \"Character Export\" | v2.1.0 | [exporter?]")
-        has(text, "- ForeverCharacterExport | v0.2.0")
+        has(text, "- ForeverCharacterExport | v0.3.0")
         has(text, "(this addon)")
         has(text, "- NoVersion | version=<not_collected: no Version field returned>")
         hasNot(text, "Blizzard_Calendar")

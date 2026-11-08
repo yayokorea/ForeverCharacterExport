@@ -8,8 +8,6 @@ local _, Addon = ...
 -- "Points spent / available" come from the tree currency (TreeCurrencyInfo.spent / .quantity, as the UI reads them in
 -- Blizzard_SharedTalentUtil.lua:148-155), never from counting nodes.
 
-local MAX_TREES = 8
-local MAX_NODES = 500
 
 local function isNumber(v)
     return type(v) == "number"
@@ -92,22 +90,14 @@ Addon:RegisterCollector("talents", function(self)
     end
     section.staged = self:Probe("C_Traits.ConfigHasStagedChanges", configID)
     section.trees = {}
-    for treeIndex, treeID in ipairs(config.treeIDs) do
-        if treeIndex > MAX_TREES then
-            section.treesTruncated = true
-            break
-        end
+    for _, treeID in ipairs(config.treeIDs) do
         local tree = { treeID = treeID, nodes = {} }
         section.trees[#section.trees + 1] = tree
         -- excludeStagedChanges = true: committed state only.
         tree.currency = self:Probe("C_Traits.GetTreeCurrencyInfo", configID, treeID, true)
         local nodeIDs = self:Read(tree, "nodeIDs", "C_Traits.GetTreeNodes", treeID)
         if type(nodeIDs) == "table" then
-            for nodeIndex, nodeID in ipairs(nodeIDs) do
-                if nodeIndex > MAX_NODES then
-                    tree.truncated = true
-                    break
-                end
+            for _, nodeID in ipairs(nodeIDs) do
                 local node = { nodeID = nodeID, info = self:Probe("C_Traits.GetNodeInfo", configID, nodeID) }
                 tree.nodes[#tree.nodes + 1] = node
                 local info = self:Val(node.info)
@@ -142,9 +132,6 @@ end, function(self, section, out)
             .. self:Fmt(config.type) .. ", trees " .. self:Fmt(config.treeIDs) .. ")"
     end)
     out:Result("uncommitted staged changes", section.staged)
-    if section.treesTruncated then
-        out:Add("<error: more than " .. MAX_TREES .. " trees; the rest were not read>")
-    end
 
     -- Pass 1: node/currency totals.
     local spent, available, currencyOk = 0, 0, true
@@ -204,8 +191,7 @@ end, function(self, section, out)
                 if not isNumber(node.rank) then failed = failed + 1 end
             end
             out:Add("tree " .. tostring(tree.treeID) .. ": " .. #tree.nodes .. " nodes read ("
-                .. (#tree.nodes - failed) .. " ok, " .. failed .. " unreadable)"
-                .. (tree.truncated and (", capped at " .. MAX_NODES) or ""))
+                .. (#tree.nodes - failed) .. " ok, " .. failed .. " unreadable)")
         end
     end
 

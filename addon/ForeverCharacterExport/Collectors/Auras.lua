@@ -15,12 +15,14 @@ local _, Addon = ...
 --    call can therefore raise or return secret fields; the Probe reports error/restricted and we stop there.
 --  * UnitExists(unit) -> bool: UnitDocumentation.lua:1192 (pet auras are only read when a pet unit exists).
 
-local LIMIT = 100
 local API = "C_UnitAuras.GetAuraDataByIndex"
 
 local function readGroup(self, unit, filter)
     local group = { unit = unit, filter = filter, auras = {} }
-    for index = 1, LIMIT do
+    -- The list ends at the first nil return (every non-ok branch below returns).
+    local index = 0
+    while true do
+        index = index + 1
         local result = self:Probe(API, unit, index, filter)
         if result.status == "ok" then
             group.auras[#group.auras + 1] = result
@@ -39,9 +41,6 @@ local function readGroup(self, unit, filter)
             return group
         end
     end
-    group.truncated = self:State("not_collected", "stopped after " .. LIMIT .. " auras; the list may be longer")
-    group.truncated.api = API
-    return group
 end
 
 local function readUnit(self, unit)
@@ -117,9 +116,6 @@ local function writeGroup(self, out, label, group, now, nowTag)
         out:Add("incomplete: aura list stopped at index " .. group.stoppedAt .. " after " .. #group.auras
             .. " readable: " .. self:Describe(group.stopped)
             .. " (possibly combat/instance restriction on unit auras; the rest is NOT proof of none)")
-    end
-    if group.truncated then
-        out:Add("incomplete: " .. self:Describe(group.truncated))
     end
 end
 

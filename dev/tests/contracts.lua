@@ -47,18 +47,15 @@ Tests["core.collect_isolates_failures"] = function()
     end)
 end
 
-Tests["core.build_mismatch_blocks_unless_forced"] = function()
-    local mismatch = function() return "1.60.1", "99999", "other", 16001 end
+Tests["core.collects_on_any_build"] = function()
+    local other = function() return "1.60.1", "99999", "other", 16001 end
     withTestCollector(function() return { marker = true } end, function() end, function()
-        WithGlobals({ GetBuildInfo = mismatch }, function()
-            local report = Addon:Collect()
-            assert(report.targetMatches == false and report.sections.zz_test.status == "not_collected")
-            report = Addon:Collect({ force = true })
-            assert(report.forced == true and report.sections.zz_test.marker == true)
+        WithGlobals({ GetBuildInfo = other }, function()
+            assert(Addon:Collect().sections.zz_test.marker == true)
         end)
         WithGlobals({ GetBuildInfo = false }, function()
-            -- an unsupported build probe must not crash the collection
-            assert(Addon:Collect().sections.zz_test.status == "not_collected")
+            -- an unsupported build probe must not crash or block the collection
+            assert(Addon:Collect().sections.zz_test.marker == true)
         end)
     end)
 end

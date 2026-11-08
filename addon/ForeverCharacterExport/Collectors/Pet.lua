@@ -14,8 +14,6 @@ local _, Addon = ...
 --     GetNumStableSlots :97 :354 :383; slot 1 is the current pet (CURRENT_PET_SLOT :2), unlocked stable slots are
 --     2..numSlots+1 (:354); a nil PetInfo is shown as an empty slot (:361-363)
 --   .../StableInfoDocumentation.lua: GetNumStablePets, IsAtStableMaster :112, PetInfo struct
-local MAX_PET_SPELLS = 500
-local MAX_STABLE_SLOTS = 20
 local NO_VALUE = "returned no value"
 
 local function isCount(value)
@@ -76,13 +74,7 @@ local function collectSpells(self, section)
     elseif not Enum or not Enum.SpellBookSpellBank or type(Enum.SpellBookSpellBank.Pet) ~= "number" then
         section.spellTraversal = self:State("unsupported", "Enum.SpellBookSpellBank.Pet unavailable")
     else
-        local last = count
-        if count > MAX_PET_SPELLS then
-            last = MAX_PET_SPELLS
-            section.spellTraversal = self:State("not_collected",
-                "pet spell count " .. count .. " exceeds cap; first " .. MAX_PET_SPELLS .. " read")
-        end
-        for slot = 1, last do
+        for slot = 1, count do
             section.spells[#section.spells + 1] = {
                 slot = slot,
                 info = self:Probe("C_SpellBook.GetSpellBookItemInfo", slot, Enum.SpellBookSpellBank.Pet),
@@ -106,11 +98,6 @@ local function collectStable(self, section)
         stable.traversal = self:State("error", "unexpected stable slot count; only current-pet slot 1 read")
     else
         last = numSlots + 1
-        if last > MAX_STABLE_SLOTS then
-            last = MAX_STABLE_SLOTS
-            stable.traversal = self:State("not_collected",
-                "stable slot count " .. numSlots .. " exceeds cap; first " .. MAX_STABLE_SLOTS .. " slots read")
-        end
     end
     for index = 1, last do
         local info = self:Probe("C_StableInfo.GetStablePetInfo", index)

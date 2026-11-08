@@ -59,7 +59,6 @@ end
 
 -- One click: collect everything, build the readable text, select it for Ctrl+C.
 -- mode: "report" (default, readable), "diag" (raw Lua-style dump), "last" (previous session snapshot, stale),
--- "force" (readable report even when the build is not the verified target).
 function Addon:Run(mode)
     mode = mode or "report"
     if mode == "last" then
@@ -71,7 +70,7 @@ function Addon:Run(mode)
     elseif mode == "diag" then
         self:ShowText(self:Export(self:Collect(), false), "diag")
     else
-        self:ShowText(self:Report(self:Collect({ force = mode == "force" }), false), "report")
+        self:ShowText(self:Report(self:Collect(), false), "report")
     end
 end
 
@@ -149,14 +148,13 @@ SlashCmdList.FOREVERCHARACTEREXPORT = function(message)
                 Addon:CreateLauncher()
             end
         end
-    elseif command == "last" or command == "diag" or command == "force" then
+    elseif command == "last" or command == "diag" then
         Addon:Run(command)
     elseif command == "" or command == "export" or command == "all" then
         Addon:Run("report")
     else
         Addon:ShowText("/fce - export everything (readable)\n/fce diag - raw diagnostic dump\n"
             .. "/fce last - previous snapshot of this session (stale)\n"
-            .. "/fce force - export even if the build is not 1.60.1/70790\n"
             .. "/fce button - show/hide the minimap button\n/fce hide - close", "report")
     end
 end

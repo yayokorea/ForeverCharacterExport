@@ -72,8 +72,7 @@ function Addon:Report(report, cached)
     out:Add("# captured " .. self:Date(startedAt) .. " | epoch " .. tostring(startedAt)
         .. (cached and " | STALE: earlier snapshot of this session, viewed " .. self:Date(self:Now()) or ""))
     out:Add("# addon runtime-verified: " .. tostring(report.runtimeVerified)
-        .. " | target build match: " .. tostring(report.targetMatches)
-        .. (report.forced and " | FORCED on a non-target build" or ""))
+        )
     out:Add("# tags: <empty> = the API answered with a real empty value | <not_collected: why> = could not be read, "
         .. "NOT proof of none | <unsupported>/<restricted>/<error> = see reason | "
         .. "[stale ...] = saved earlier, not live")

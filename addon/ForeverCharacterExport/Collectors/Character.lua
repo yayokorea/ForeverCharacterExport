@@ -7,10 +7,9 @@ local _, Addon = ...
 --   ZoneScriptDocumentation, MapDocumentation, RestrictedActionsDocumentation, SystemDocumentation (TIME_PLAYED_MSG).
 --   Blizzard_UIPanels_Game/Camelot: PaperDollFrameStats.lua, PaperDollFrame.lua, PaperDollFrameConstants.lua.
 
-local floor, min = math.floor, math.min
+local floor = math.floor
 
 local PLAYER = "player"
-local MAX_SCHOOL_CAP = 20
 
 -- Primary stats in UnitStat index order. The UI uses LE_UNIT_STAT_* (PaperDollFrame.lua:131-143) and also uses the
 -- same index into the stat list "must match UNITSTAT order" (PaperDollFrameConstants.lua, PaperDollFrameStats.lua:267),
@@ -264,7 +263,7 @@ local function collect(self)
     local maxSchool = _G.MAX_SPELL_SCHOOLS
     s.spellDamage = {}
     if type(maxSchool) == "number" then
-        for school = 2, min(floor(maxSchool), MAX_SCHOOL_CAP) do
+        for school = 2, floor(maxSchool) do
             s.spellDamage[school] = self:Probe("GetSpellBonusDamage", school)
         end
     else
@@ -469,10 +468,11 @@ local function format(self, s, out)
         out:State("spell power by school", s.spellDamageState)
     else
         local parts = {}
-        for school = 2, MAX_SCHOOL_CAP do
+        local school = 2
+        while s.spellDamage[school] do
             local result = s.spellDamage[school]
-            if not result then break end
             parts[#parts + 1] = school .. "=" .. (self:Describe(result) or num(self:Val(result, 1)))
+            school = school + 1
         end
         out:Add("spell power by school (school index=bonus): " .. table.concat(parts, " "))
     end

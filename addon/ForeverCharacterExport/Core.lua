@@ -1,6 +1,6 @@
 local addonName, Addon = ...
 Addon.name = addonName
-Addon.version = "0.2.0"
+Addon.version = "0.3.0"
 Addon.collectors = {}
 Addon.formatters = {}
 Addon.handlers = {}
@@ -66,8 +66,7 @@ Addon:On("ADDON_LOADED", function(self, _, loaded)
     self.db = db
 end)
 
-function Addon:Collect(options)
-    local force = type(options) == "table" and options.force == true
+function Addon:Collect()
     local report = {
         schema = 2,
         addonVersion = self.version,
@@ -79,17 +78,9 @@ function Addon:Collect(options)
         sections = {},
     }
     report.build = self:Probe("GetBuildInfo")
-    local build = self:First(report.build)
-    local returns = report.build.values or {}
-    local matches = build == "1.60.1" and returns[2] == "70790" and returns[4] == 16001
-    report.targetMatches = matches
-    report.forced = (force and not matches) or nil
     for _, name in ipairs(self.order) do
         local collector = self.collectors[name]
-        if not matches and not force then
-            report.sections[name] = self:State("not_collected",
-                "target build not confirmed (use /fce force to override)")
-        elseif not collector then
+        if not collector then
             report.sections[name] = self:State("not_collected", "collector not registered")
         else
             local ok, result = pcall(collector, self)

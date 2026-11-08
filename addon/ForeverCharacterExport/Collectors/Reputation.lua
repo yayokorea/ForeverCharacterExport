@@ -4,7 +4,6 @@ local _, Addon = ...
 -- Reputation list as the Camelot reputation panel reads it (Camelot/ReputationFrame.lua:165-210):
 -- C_Reputation.GetNumFactions() visible rows, C_Reputation.GetFactionDataByIndex(i) per row.
 -- Collapsed headers hide their children; expanding them is a UI state change, so it is reported instead.
-local MAX_ROWS = 500
 -- Declared ReputationSortType enum (ReputationInfoDocumentation.lua:328-338).
 local SORT_NAMES = { [0] = "None", [1] = "Account", [2] = "Character" }
 
@@ -46,10 +45,6 @@ Addon:RegisterCollector("reputation", function(self)
         section.count = self:State("empty", "GetNumFactions returned 0")
         section.count.api = size.api
         return section
-    end
-    if total > MAX_ROWS then
-        section.truncatedFrom = total
-        total = MAX_ROWS
     end
 
     local gender = self:Val(section.gender, 1)
@@ -96,9 +91,6 @@ end, function(self, section, out)
     out:Result("watched", section.watched, function(v)
         return type(v) == "table" and label(v) or self:Fmt(v)
     end)
-    if section.truncatedFrom then
-        out:Add("truncated: " .. section.truncatedFrom .. " rows reported by the API, first " .. MAX_ROWS .. " read")
-    end
 
     local headers, factions, failedRows = 0, 0, 0
     local activeFailure, activeFailures = nil, 0

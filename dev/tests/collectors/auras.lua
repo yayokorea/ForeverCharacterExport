@@ -137,11 +137,12 @@ Tests["collector.auras.pet_read_only_when_pet_exists"] = function()
         end)
 end
 
-Tests["collector.auras.hard_cap"] = function()
-    local api = { GetAuraDataByIndex = function() return { name = "x", spellId = 1, duration = 0, expirationTime = 0 } end }
+Tests["collector.auras.reads_long_lists_fully"] = function()
+    local api = { GetAuraDataByIndex = function(_, index)
+        if index <= 300 then return { name = "x", spellId = 1, duration = 0, expirationTime = 0 } end
+    end }
     WithGlobals({ C_UnitAuras = api, GetTime = function() return 1 end, UnitExists = noPet }, function()
-        local text, section = run()
-        assert(#section.player.buffs.auras == 100 and section.player.buffs.truncated)
-        has(text, "incomplete: <not_collected: stopped after 100 auras")
+        local _, section = run()
+        assert(#section.player.buffs.auras == 300 and section.player.buffs.complete)
     end)
 end

@@ -10,7 +10,6 @@ local _, Addon = ...
 -- Purpose: tell the assistant which other addons (especially other exporters) are running. Only loaded addons are
 -- listed; Blizzard_* addons are collapsed into one count. Everything else is a count.
 
-local LIMIT = 500
 
 local function isBlizzard(name)
     return type(name) == "string" and string.sub(name, 1, 9) == "Blizzard_"
@@ -21,11 +20,6 @@ Addon:RegisterCollector("addons", function(self)
     local total = self:Val(section.count)
     if type(total) ~= "number" or total < 0 or total ~= math.floor(total) then
         return section
-    end
-    if total > LIMIT then
-        section.capped = self:State("not_collected",
-            "only the first " .. LIMIT .. " of " .. total .. " addons were read")
-        total = LIMIT
     end
     for index = 1, total do
         local entry = {
@@ -84,7 +78,6 @@ end, function(self, section, out)
         out:Add("unreadable addon entries: " .. #unreadable .. " (first index " .. unreadable[1] .. "): "
             .. tostring(firstUnreadable))
     end
-    if section.capped then out:Add("incomplete: " .. self:Describe(section.capped)) end
     if #listed == 0 then
         out:Add("running third-party addons: none (count above is from the API, not a guess)")
         return

@@ -12,9 +12,6 @@ local _, Addon = ...
 -- SpellBookItemType values (SpellBookConstantsDocumentation.lua:27-31): 1 Spell, 2 FutureSpell, 3 PetAction, 4 Flyout.
 
 local ITEM_SPELL, ITEM_FUTURE, ITEM_PET_ACTION, ITEM_FLYOUT = 1, 2, 3, 4
-local MAX_SKILL_LINES = 40
-local MAX_ITEMS_PER_LINE = 500
-local MAX_ITEMS_TOTAL = 1500
 local WRAP = 115
 
 local function isNumber(v)
@@ -41,7 +38,7 @@ Addon:RegisterCollector("spells", function(self)
     end
     section.lines = {}
     local total = 0
-    for index = 1, math.min(count, MAX_SKILL_LINES) do
+    for index = 1, count do
         local line = { index = index, info = self:Probe("C_SpellBook.GetSpellBookSkillLineInfo", index), items = {} }
         section.lines[#section.lines + 1] = line
         local info = self:Val(line.info)
@@ -49,16 +46,11 @@ Addon:RegisterCollector("spells", function(self)
             local offset, size = info.itemIndexOffset, info.numSpellBookItems
             if info.shouldHide == true or info.offSpecID ~= nil then
                 line.skipped = info.shouldHide == true and "hidden" or "off-spec"
-            elseif not isNumber(offset) or not isNumber(size) or offset < 0 or size < 0
-                or size > MAX_ITEMS_PER_LINE then
+            elseif not isNumber(offset) or not isNumber(size) or offset < 0 or size < 0 then
                 line.info = self:State("error", "skill line has unusable itemIndexOffset/numSpellBookItems")
                 line.info.api = "C_SpellBook.GetSpellBookSkillLineInfo"
             else
                 for slot = offset + 1, offset + size do
-                    if total >= MAX_ITEMS_TOTAL then
-                        section.truncated = true
-                        break
-                    end
                     total = total + 1
                     line.items[#line.items + 1] = {
                         slot = slot,
@@ -67,9 +59,6 @@ Addon:RegisterCollector("spells", function(self)
                 end
             end
         end
-    end
-    if count > MAX_SKILL_LINES then
-        section.truncated = true
     end
     return section
 end, function(self, section, out)
@@ -184,9 +173,6 @@ end, function(self, section, out)
         .. (hiddenLines > 0 and (", hidden skill lines skipped: " .. hiddenLines) or "")
         .. (offSpecLines > 0 and (", off-spec skill lines: " .. offSpecLines) or ""))
     out:Add("note: an empty rank text means no rank, or spell data not loaded yet (the API cannot tell)")
-    if section.truncated then
-        out:Add("<error: spellbook larger than the safety cap; the rest was not read>")
-    end
     for _, text in ipairs(body) do
         out:Add(text)
     end

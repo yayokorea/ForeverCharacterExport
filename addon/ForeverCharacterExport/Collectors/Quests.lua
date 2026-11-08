@@ -11,8 +11,6 @@ local _, Addon = ...
 -- The collapsed state of a header is only reported, never changed: the old game output showed that the log still
 -- returns every quest row while headers are collapsed.
 
-local MAX_ROWS = 500
-local MAX_TITLE_LOOKUPS = 500
 local TITLE_API = "C_QuestLog.GetTitleForQuestID"
 
 local function isCount(value)
@@ -62,7 +60,7 @@ local function readLog(self, section)
             "quest log entry counts unavailable or invalid; rows not read")
         return
     end
-    local limit = math.min(entries, MAX_ROWS)
+    local limit = entries
     local headers, collapsed, quests, missing, malformed = 0, 0, 0, 0, 0
     for index = 1, limit do
         local row = { index = index }
@@ -89,9 +87,6 @@ local function readLog(self, section)
     section.visibleQuestCount, section.missingRows, section.malformedRows = quests, missing, malformed
 
     local problems = {}
-    if entries > MAX_ROWS then
-        problems[#problems + 1] = "log has " .. entries .. " entries, only the first " .. MAX_ROWS .. " were read"
-    end
     if missing > 0 then
         problems[#problems + 1] = missing .. " row(s) returned no readable info"
     end
@@ -117,25 +112,21 @@ local function readLog(self, section)
 end
 
 local function lookupTitles(self, section, ids)
-    local titles, known, unknown, blocked, skipped = {}, 0, 0, 0, 0
+    local titles, known, unknown, blocked = {}, 0, 0, 0
     local unsupported
-    for position, id in ipairs(ids) do
-        if position > MAX_TITLE_LOOKUPS then
-            skipped = skipped + 1
+    for _, id in ipairs(ids) do
+        local result = self:Probe(TITLE_API, id)
+        local title = self:Val(result, 1)
+        if result.status == "unsupported" then
+            unsupported = result
+            break
+        elseif type(title) == "string" and title ~= "" then
+            titles[id] = title
+            known = known + 1
+        elseif result.status == "restricted" or result.status == "error" then
+            blocked = blocked + 1
         else
-            local result = self:Probe(TITLE_API, id)
-            local title = self:Val(result, 1)
-            if result.status == "unsupported" then
-                unsupported = result
-                break
-            elseif type(title) == "string" and title ~= "" then
-                titles[id] = title
-                known = known + 1
-            elseif result.status == "restricted" or result.status == "error" then
-                blocked = blocked + 1
-            else
-                unknown = unknown + 1
-            end
+            unknown = unknown + 1
         end
     end
     section.completedTitles = titles
@@ -147,8 +138,7 @@ local function lookupTitles(self, section, ids)
         state = self:State("ok", "titles returned for all " .. known .. " ids")
     else
         state = self:State("partial", known .. " of " .. #ids .. " ids returned a title; " .. unknown
-            .. " returned none (cache cold or unknown), " .. blocked .. " restricted/error, " .. skipped
-            .. " not looked up (cap " .. MAX_TITLE_LOOKUPS .. ")")
+            .. " returned none (cache cold or unknown), " .. blocked .. " restricted/error")
     end
     state.api = TITLE_API
     state.info = true -- partial titles are reported in the text, not counted as an unread API value

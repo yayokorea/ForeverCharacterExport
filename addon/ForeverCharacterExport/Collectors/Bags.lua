@@ -17,9 +17,6 @@ local _, Addon = ...
 --  * Ammo: C_Item.GetItemInfoInstant returns classID as 6th value (ItemDocumentation.lua:659-678; used
 --    Shared/MainMenuBarBagButtons.lua:257); Enum.ItemClass.Projectile (ItemConstantsDocumentation.lua:282).
 
-local MAX_SLOTS = 500 -- hard cap per container
-local MAX_UNREADABLE_KEPT = 20 -- unreadable slot states stored per container (the count is always exact)
-local MAX_CLASSIFY = 200 -- item types classified for the ammo line
 
 local floor = math.floor
 
@@ -108,7 +105,7 @@ end
 -- Reads one container. Returns a small plain table (safe to persist):
 --  id, enumName, name, size, free, family, emptySlots{}, items{ {slot,itemID,name,count,quality,locked} },
 --  unreadable{ State+slot }, unreadableCount, sizeState/freeState (State when that value was unreadable),
---  bagItem{itemID,name} / bagItemState, truncated.
+--  bagItem{itemID,name} / bagItemState.
 -- opts.bagItem: also read the bag item equipped in this slot. opts.noTotals: keep out of slot totals.
 function Addon:ReadContainer(bagID, opts)
     opts = opts or {}
@@ -178,10 +175,6 @@ function Addon:ReadContainer(bagID, opts)
     local ctx = { probe = probe }
 
     local last = size
-    if last > MAX_SLOTS then
-        last = MAX_SLOTS
-        bag.truncated = MAX_SLOTS
-    end
     for slot = 1, last do
         local kind, payload = readSlot(self, bagID, slot, ctx)
         if kind == "item" then
@@ -190,10 +183,8 @@ function Addon:ReadContainer(bagID, opts)
             bag.emptySlots[#bag.emptySlots + 1] = slot
         else
             bag.unreadableCount = bag.unreadableCount + 1
-            if #bag.unreadable < MAX_UNREADABLE_KEPT then
-                payload.slot = slot
-                bag.unreadable[#bag.unreadable + 1] = payload
-            end
+            payload.slot = slot
+            bag.unreadable[#bag.unreadable + 1] = payload
             if payload.status == "unsupported" then
                 -- Every remaining slot would fail the same way.
                 bag.unreadableCount = bag.unreadableCount + (last - slot)
@@ -204,10 +195,10 @@ function Addon:ReadContainer(bagID, opts)
 
     if type(freeApi) == "number" then
         bag.free = freeApi
-        if bag.unreadableCount == 0 and not bag.truncated and freeApi ~= #bag.emptySlots then
+        if bag.unreadableCount == 0 and freeApi ~= #bag.emptySlots then
             bag.freeMismatch = #bag.emptySlots
         end
-    elseif bag.unreadableCount == 0 and not bag.truncated then
+    elseif bag.unreadableCount == 0 then
         bag.free = #bag.emptySlots
         bag.freeCounted = true
     end
@@ -291,12 +282,10 @@ local function bagHeader(self, bag)
     return text
 end
 
--- Prints totals, then an aggregated item list, then every container. opts: maxItemTypes, maxSlotLines,
--- afterTotals(summary) (called right after the totals line, used for the ammo line).
+-- Prints totals, then an aggregated item list, then every container. opts: afterTotals(summary)
+-- (called right after the totals line, used for the ammo line).
 function Addon:WriteContainers(out, bags, opts)
     opts = opts or {}
-    local maxTypes = opts.maxItemTypes or 80
-    local slotBudget = opts.maxSlotLines or 200
     local summary = self:SummarizeContainers(bags)
 
     local line = "slots: " .. summary.free .. " free / " .. summary.total .. " total"
@@ -323,11 +312,7 @@ function Addon:WriteContainers(out, bags, opts)
             and "NOT proof of empty: some containers/slots were unreadable" or "all readable slots are empty") .. ")")
     else
         out:Add("items (" .. #summary.items .. " types in " .. summary.stacks .. " stacks, sorted by name):")
-        for index, item in ipairs(summary.items) do
-            if index > maxTypes then
-                out:Add("- ... " .. (#summary.items - maxTypes) .. " more item types omitted")
-                break
-            end
+        for _, item in ipairs(summary.items) do
             out:Add("- " .. itemText(self, item.name, item.itemID) .. " x" .. item.count)
         end
     end
@@ -345,19 +330,11 @@ function Addon:WriteContainers(out, bags, opts)
             if bag.freeCounted then head = head .. " (counted)" end
             if bag.family and bag.family ~= 0 then head = head .. " | bagFamily " .. bag.family end
             out:Add(head)
-            if bag.truncated then
-                out:Add("  [only the first " .. bag.truncated .. " of " .. bag.size .. " slots were read]")
-            end
             if bag.freeMismatch then
                 out:Add("  [free-slot API and counted empty slots disagree: " .. tostring(bag.free) .. " vs "
                     .. bag.freeMismatch .. "]")
             end
             for _, item in ipairs(bag.items) do
-                if slotBudget <= 0 then
-                    out:Add("  ... item slots omitted (cap reached; see the item list above)")
-                    break
-                end
-                slotBudget = slotBudget - 1
                 out:Add("  [" .. item.slot .. "] " .. itemText(self, item.name, item.itemID) .. " x" .. item.count
                     .. (item.quality and (" quality=" .. item.quality) or "") .. (item.locked and " locked" or ""))
             end
@@ -411,11 +388,7 @@ local function computeAmmo(self, summary)
     end
     local api = "C_Item.GetItemInfoInstant"
     local ammo = { total = 0, items = {}, unclassified = 0 }
-    for index, item in ipairs(summary.items) do
-        if index > MAX_CLASSIFY then
-            ammo.unclassified = ammo.unclassified + (#summary.items - MAX_CLASSIFY)
-            break
-        end
+    for _, item in ipairs(summary.items) do
         local result = self:Probe(api, item.itemID)
         if result.status == "unsupported" then
             local state = self:State("unsupported", "function unavailable at runtime; items cannot be classified")

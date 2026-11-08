@@ -4,7 +4,6 @@ local _, Addon = ...
 -- C_CurrencyInfo.GetCurrencyListSize() rows, C_CurrencyInfo.GetCurrencyListInfo(i) per row.
 -- Collapsed headers hide their children; expanding them is a UI state change, so it is reported instead.
 -- Money is collected by the character collector, not here.
-local MAX_ROWS = 500
 -- PvP rank points faction used by the Camelot PvP rank panel (Camelot/PVPRankFrame.lua:1,91).
 local PVP_RANK_POINTS_FACTION_ID = 2800
 
@@ -44,10 +43,6 @@ Addon:RegisterCollector("currency", function(self)
         section.list.api = size.api
         return section
     end
-    if total > MAX_ROWS then
-        section.truncatedFrom = total
-        total = MAX_ROWS
-    end
     for index = 1, total do
         local row = { index = index, info = self:Probe("C_CurrencyInfo.GetCurrencyListInfo", index) }
         local info = self:Val(row.info, 1)
@@ -75,10 +70,6 @@ end, function(self, section, out)
         out:Result("currency list size", section.size)
     end
     if section.size.status == "ok" and not section.list then
-        if section.truncatedFrom then
-            out:Add("truncated: " .. section.truncatedFrom .. " rows reported by the API, first " .. MAX_ROWS
-                .. " read")
-        end
         local headers, currencies, failed = 0, 0, 0
         for _, row in ipairs(section.rows) do
             local info = self:Val(row.info, 1)

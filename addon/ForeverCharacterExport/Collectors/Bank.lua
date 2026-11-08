@@ -15,7 +15,6 @@ local _, Addon = ...
 --    1067,1127). C_Bank.CanViewBank(bankType): Camelot/BankFrame.lua RefreshPageTabs. Enum.BankType.Character /
 --    Account: ItemConstantsDocumentation.lua:17-27. No bank bag id is hardcoded.
 
-local MAX_TABS = 30
 
 local BANK_TYPES = {
     { key = "Character", label = "Character bank" },
@@ -58,10 +57,6 @@ function Addon:ReadBank()
                 else
                     data.tabListOk = true
                     for index, tab in ipairs(list) do
-                        if index > MAX_TABS then
-                            entry.tabsTruncated = MAX_TABS
-                            break
-                        end
                         if type(tab) == "table" and type(tab.ID) == "number" then
                             local bag = self:ReadContainer(tab.ID)
                             if type(tab.name) == "string" and tab.name ~= "" then bag.tabName = tab.name end
@@ -174,10 +169,7 @@ end, function(self, section, out)
                 elseif #entry.tabs == 0 then
                     out:Add("tabs: none purchased (C_Bank.FetchPurchasedBankTabData returned an empty list)")
                 else
-                    if entry.tabsTruncated then
-                        out:Add("[only the first " .. entry.tabsTruncated .. " tabs were read]")
-                    end
-                    self:WriteContainers(out, entry.tabs, { maxItemTypes = 150, maxSlotLines = 250 })
+                    self:WriteContainers(out, entry.tabs)
                 end
             end
         end

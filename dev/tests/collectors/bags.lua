@@ -296,14 +296,3 @@ Tests["collector.bags.bag_range_follows_inventory_constants"] = function()
         end)
 end
 
-Tests["collector.bags.item_list_cap"] = function()
-    local layout = bagLayout()
-    layout[0] = { size = 100, items = {} }
-    for slot = 1, 90 do
-        layout[0].items[slot] = { id = 10000 + slot, name = string.format("Item %03d", slot), count = 1 }
-    end
-    run(layout, nil, function(_, text)
-        has(text, "- ... 12 more item types omitted")
-        has(text, "(92 types in 92 stacks, sorted by name):")
-    end)
-end
