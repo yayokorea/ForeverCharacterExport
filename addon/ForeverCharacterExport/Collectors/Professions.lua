@@ -526,7 +526,8 @@ end, function(self, section, out)
     if section.state then
         out:State("제작 목록", section.state)
         if section.window.verdict == "closed" then
-            out:Add("창 열리지 않음, 관측 없음: 제작법 0개라는 뜻이 아니라 읽지 않았다는 뜻입니다. 전문기술 창을 연 상태에서 다시 내보내세요.")
+            out:Add("창 열리지 않음, 관측 없음: 제작법 0개라는 뜻이 아니라 읽지 않았다는 뜻입니다. "
+            .. "전문기술 책 페이지만 열려 있고 제작 목록이 선택되지 않았을 때도 같은 상태입니다. 제작 목록을 연 상태에서 다시 내보내세요.")
         end
         return
     end
