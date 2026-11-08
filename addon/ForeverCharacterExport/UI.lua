@@ -20,9 +20,10 @@ local _, Addon = ...
 --    Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.xml:148, UIPanelButtonTemplate :315 (the [Family] line of the
 --    SharedXML TOC resolves to the only existing family folder, Mainline; the TOC also lists
 --    Shared\Button\UIPanelButtonTemplates.xml). UIPanelButtonTemplate was already used by the 0.3.0 window.
---  * UIPanelScrollFrameTemplate has NO definition in the pinned mirror (the modern UI uses ScrollBox). It is kept
---    because the 0.3.0 window used it and produced a working report in the game; creation is guarded with pcall and
---    falls back to a plain ScrollFrame with the mouse wheel.
+--  * UIPanelScrollFrameTemplate: Blizzard_SharedXML/SecureScrollTemplates.xml:44 (listed in Blizzard_SharedXML.toc:185,
+--    unconditional); it is also what the 0.3.0 window used in the game. Creation is still guarded with pcall and
+--    falls back to a plain ScrollFrame with the mouse wheel. The fallback calls EnableMouseWheel and
+--    GetVerticalScroll, which have no Lua call site in references/upstream: UNVERIFIED (fallback only).
 --  * Fonts are default font objects only (GameFontNormal, GameFontNormalSmall, GameFontHighlightSmall,
 --    ChatFontNormal; all referenced by upstream XML), so Korean text renders with the client's own font.
 
