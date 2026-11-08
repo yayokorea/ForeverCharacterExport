@@ -54,6 +54,11 @@ local NEEDS_ACTION = {
     "bank: open the bank once; the contents are then saved and shown as a stale snapshot",
     "flight paths: open a flight master's map once; known nodes are then saved as a stale snapshot",
     "played time: arrives by event after login; shown as stale when older than this session",
+    "professions: open the profession (trade skill) window, then export again; the recipe list is read only while "
+        .. "that window is open",
+    "planning trainer block: open a class trainer window, then export again (also shows whether this build has "
+        .. "GetNumTrainerServices / C_Trainer.GetTrainerType / TRAINER_SHOW; they are not in the upstream mirror)",
+    "spelldetails: spell descriptions that read as not loaded yet need another export a little later",
 }
 
 local function problemKey(a, b)
@@ -76,25 +81,35 @@ function Addon:Report(report, cached)
     out:Add("# tags: <empty> = the API answered with a real empty value | <not_collected: why> = could not be read, "
         .. "NOT proof of none | <unsupported>/<restricted>/<error> = see reason | "
         .. "[stale ...] = saved earlier, not live")
+    if type(report.disabled) == "table" and #report.disabled > 0 then
+        out:Add("# switched off in the settings window (NOT a statement that the data is absent): "
+            .. table.concat(report.disabled, ", "))
+    end
     local totals, allProblems = {}, {}
     for _, name in ipairs(self.order) do
         local section = report.sections[name]
         local counts, problems = self:Tally(section)
         totals[name] = counts
         allProblems[name] = problems
-        local summary = "[api ok=" .. counts.ok .. " empty=" .. counts.empty .. " not_read="
-            .. (counts.not_collected + counts.unsupported + counts.restricted + counts.error) .. "]"
-        out:Section(name, summary)
-        local formatter = self.formatters[name]
-        if type(section) == "table" and self.knownStatus[section.status] and section.status ~= "ok" then
-            -- The collector returned a bare state (build mismatch, collector failure): nothing to format.
-            out:State("section", section)
-        elseif type(formatter) ~= "function" then
-            out:Add("<not_collected: no formatter registered>")
+        if type(section) == "table" and section.disabled then
+            out:Section(name, "[off]")
+            out:Add("<not_collected: switched off in the settings window; this is NOT proof that there is no data>")
+            allProblems[name] = {}
         else
-            local ok, err = pcall(formatter, self, section, out)
-            if not ok then
-                out:Add("<error: formatter failed: " .. tostring(err) .. ">")
+            local summary = "[api ok=" .. counts.ok .. " empty=" .. counts.empty .. " not_read="
+                .. (counts.not_collected + counts.unsupported + counts.restricted + counts.error) .. "]"
+            out:Section(name, summary)
+            local formatter = self.formatters[name]
+            if type(section) == "table" and self.knownStatus[section.status] and section.status ~= "ok" then
+                -- The collector returned a bare state (build mismatch, collector failure): nothing to format.
+                out:State("section", section)
+            elseif type(formatter) ~= "function" then
+                out:Add("<not_collected: no formatter registered>")
+            else
+                local ok, err = pcall(formatter, self, section, out)
+                if not ok then
+                    out:Add("<error: formatter failed: " .. tostring(err) .. ">")
+                end
             end
         end
     end
@@ -102,8 +117,13 @@ function Addon:Report(report, cached)
     out:Add("Per-section API results (ok/empty/not_collected/unsupported/restricted/error):")
     for _, name in ipairs(self.order) do
         local c = totals[name]
-        out:Add("- " .. name .. ": " .. c.ok .. "/" .. c.empty .. "/" .. c.not_collected .. "/" .. c.unsupported
-            .. "/" .. c.restricted .. "/" .. c.error)
+        local current = report.sections[name]
+        if type(current) == "table" and current.disabled then
+            out:Add("- " .. name .. ": off (switched off in the settings window)")
+        else
+            out:Add("- " .. name .. ": " .. c.ok .. "/" .. c.empty .. "/" .. c.not_collected .. "/" .. c.unsupported
+                .. "/" .. c.restricted .. "/" .. c.error)
+        end
     end
     local shown, limit = 0, 60
     out:Add("Unread values (status, API, reason):")

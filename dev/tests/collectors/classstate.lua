@@ -396,3 +396,23 @@ Tests["collector.classstate.section_registered_and_ordered"] = function()
     end
     assert(found)
 end
+
+-- The first hunter report printed MainHand and Ranged twice: one API call returned two entries, it was not a double read.
+Tests["collector.classstate.several_entries_in_one_call_are_numbered_not_duplicated"] = function()
+    local calls = {}
+    WithGlobals(hunter({
+        C_Item = { GetWeaponEnchantInfo = function(slot)
+            calls[slot] = (calls[slot] or 0) + 1
+            if slot == 0 then
+                return { { hasEnchant = false, enchantType = 0 }, { hasEnchant = false, enchantType = 0 } }
+            end
+            return {}
+        end },
+    }), function()
+        local text = run()
+        assert(calls[0] == 1, "the API is called once per slot")
+        has(text, "- MainHand (slot 0) [항목 1/2]: hasEnchant=false")
+        has(text, "- MainHand (slot 0) [항목 2/2]: hasEnchant=false")
+        has(text, "슬롯마다 API를 1번만 호출함")
+    end)
+end

@@ -1,6 +1,6 @@
 local addonName, Addon = ...
 Addon.name = addonName
-Addon.version = "0.3.0"
+Addon.version = "0.4.0"
 Addon.collectors = {}
 Addon.formatters = {}
 Addon.handlers = {}
@@ -54,7 +54,8 @@ if frame then
 end
 Addon.Dispatch = dispatch -- exposed for the mocked tests
 
--- SavedVariablesPerCharacter. Holds persisted snapshots (see Compat.lua Persist) and the launcher position.
+-- SavedVariablesPerCharacter. Holds persisted snapshots (see Compat.lua Persist), the launcher position and the
+-- settings window state (sections / detail / window / ui; logic in Settings.lua).
 Addon:On("ADDON_LOADED", function(self, _, loaded)
     if loaded ~= addonName then return end
     if type(ForeverCharacterExportDB) ~= "table" then
@@ -64,7 +65,13 @@ Addon:On("ADDON_LOADED", function(self, _, loaded)
     db.schema = 1
     if type(db.snapshots) ~= "table" then db.snapshots = {} end
     if type(db.minimap) ~= "table" then db.minimap = {} end
+    if type(db.sections) ~= "table" then db.sections = {} end -- sections[name] == false switches one off
+    if type(db.detail) ~= "table" then db.detail = {} end     -- detail[name] == "full" asks for the long text
+    if type(db.window) ~= "table" then db.window = {} end
+    if type(db.ui) ~= "table" then db.ui = {} end
     self.db = db
+    -- Same table, not a copy: collectors read Addon.detail at collection time, so a toggle needs no reload.
+    self.detail = db.detail
 end)
 
 function Addon:Collect()
@@ -77,11 +84,18 @@ function Addon:Collect()
         startedAt = self:Timestamp(),
         conditions = "manual command; player only; no UI expansion or data requests",
         sections = {},
+        disabled = {},
     }
     report.build = self:Probe("GetBuildInfo")
     for _, name in ipairs(self.order) do
         local collector = self.collectors[name]
-        if not collector then
+        if type(self.IsSectionEnabled) == "function" and not self:IsSectionEnabled(name) then
+            -- Never silently skipped: a visible state, kept out of the unread counts (info = true).
+            local state = self:State("not_collected", "disabled in settings (off is not evidence of no data)")
+            state.info, state.disabled = true, true
+            report.sections[name] = state
+            report.disabled[#report.disabled + 1] = name
+        elseif not collector then
             report.sections[name] = self:State("not_collected", "collector not registered")
         else
             local ok, result = pcall(collector, self)

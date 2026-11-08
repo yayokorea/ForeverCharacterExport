@@ -575,10 +575,12 @@ end, function(self, section, out)
                             if r.spellID then ids[#ids + 1] = "spell " .. tostring(r.spellID) end
                             if r.mountID then ids[#ids + 1] = "mount " .. tostring(r.mountID) end
                             if r.isAccountUnlock == true then ids[#ids + 1] = "account unlock" end
-                            -- isCollected is a property of the REWARD itself (for example an already collected
-                            -- item/appearance, MajorFactionsDocumentation.lua:338), not "this level was reached".
+                            -- isCollected: declared nilable bool on the reward (MajorFactionsDocumentation.lua:338).
+                            -- No UI call site was found (cache Blizzard_LegacyRewardTrack.lua never reads it), so
+                            -- its meaning is unverified. In the first hunter report a level-40 reward showed true
+                            -- while the whole track was locked: it is NOT "this level was reached".
                             if r.isCollected ~= nil then
-                                ids[#ids + 1] = "reward already collected=" .. tostring(r.isCollected)
+                                ids[#ids + 1] = "isCollected=" .. tostring(r.isCollected) .. " (meaning unverified)"
                             end
                             if #ids > 0 then label = label .. " (" .. table.concat(ids, ", ") .. ")" end
                         end
@@ -610,12 +612,13 @@ end, function(self, section, out)
             .. (isNumber(earned) and tostring(earned) or (self:Describe(reward.level) or "<not_collected>")))
         out:Add("available (unspent, quantity): " .. self:Fmt(entry.quantity))
         out:Add("spent (committed, pool-wide): " .. self:Fmt(entry.spent))
-        -- maxQuantity is declared nilable (SharedTraitsDocumentation.lua:1194). The only upstream reading of a
-        -- currency maxQuantity (Blizzard_TokenUI.lua:540) shows a cap only when it is > 0, so 0/nil is read as
-        -- "no cap reported", NOT as a cap of 0.
+        -- maxQuantity is declared nilable (SharedTraitsDocumentation.lua:1194). The Legacy tree tooltip prints it as
+        -- the "seasonal cap" without any > 0 guard (cache Blizzard_LegacyTree.lua:307), so a 0 may be a literal
+        -- cap of 0 or an unset value; the first hunter report had maxQuantity=0 beside max available=65.
         local cap = entry.maxQuantity
-        out:Add("maxQuantity: " .. self:Fmt(cap) .. ((cap == nil or cap == 0) and " (cap not reported; 0/nil does not "
-            .. "mean the points bar maximum is 0)" or " (cap reported by the tree currency)"))
+        out:Add("maxQuantity (Legacy tree tooltip shows it as 'seasonal cap'): " .. self:Fmt(cap)
+            .. ((cap == nil or cap == 0) and " (0/nil: unset or a literal 0 is NOT resolved; compare the max "
+            .. "available below)" or ""))
         out:Result("max available (GetMaxAvailableTraitCurrency, limitBySourcedMax=false; the UI's points bar "
             .. "maximum; relation to maxQuantity not proven)", points.maxAvailable)
         if points.stagedEntry and (points.stagedEntry.quantity ~= entry.quantity

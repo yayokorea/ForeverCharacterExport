@@ -269,6 +269,7 @@ Addon:RegisterCollector("spelldetails", function(self)
             .. "one snapshot, not refreshed",
         observedAt = self:Timestamp(),
         limit = limit,
+        textUpdates = self.spellTextUpdates or 0, -- stored now so a later /fce last prints the same number
     }
     local missing = {}
     local probe = newProbe(self, missing)
@@ -383,7 +384,7 @@ end, function(self, section, out)
             out:Add("설명 읽음 " .. loaded .. " / 미로딩(빈 문자열) " .. notLoaded .. " / 표시된 " .. shown .. "개 기준")
             if notLoaded > 0 then
                 out:Add("미로딩 설명이 있음: 잠시 뒤 다시 내보내면 읽힐 수 있음 (SPELL_TEXT_UPDATE 로그인 후 수신 "
-                    .. tostring(Addon.spellTextUpdates or 0) .. "회; 자동 재시도는 근거가 없어 하지 않음)")
+                    .. tostring(section.textUpdates or 0) .. "회; 자동 재시도는 근거가 없어 하지 않음)")
             end
         end
         for _, entry in ipairs(section.spells) do

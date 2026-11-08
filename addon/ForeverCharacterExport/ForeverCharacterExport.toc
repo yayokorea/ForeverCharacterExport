@@ -1,10 +1,10 @@
 ## Interface: 16001
 ## Title: Forever Character Export
 ## Title-koKR: 포에버 캐릭터 내보내기
-## Notes: One-click export of your character (gear, bags, quests, talents, skills, pet, and more) as readable text. Type /fce.
-## Notes-koKR: 장비, 가방, 퀘스트, 특성, 기술, 소환수 등 캐릭터 정보를 한 번에 읽기 쉬운 텍스트로 내보냅니다. /fce 입력.
+## Notes: One-click export of your character (gear, bags, quests, talents, skills, pet, and more) as readable text. Open the window from the minimap button or /fce.
+## Notes-koKR: 장비, 가방, 퀘스트, 특성, 기술, 소환수 등 캐릭터 정보를 한 번에 읽기 쉬운 텍스트로 내보냅니다. 미니맵 버튼 또는 /fce로 창을 엽니다.
 ## Author: Yayo
-## Version: 0.3.0
+## Version: 0.4.0
 ## Category: Utility
 ## IconTexture: Interface\AddOns\ForeverCharacterExport\icon
 ## SavedVariablesPerCharacter: ForeverCharacterExportDB
@@ -34,4 +34,5 @@ Collectors/Professions.lua
 Collectors/SpellDetails.lua
 Collectors/Planning.lua
 Export.lua
+Settings.lua
 UI.lua

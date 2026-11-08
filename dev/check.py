@@ -42,7 +42,7 @@ lua.globals().AddonUnderTest = addon
 lua.execute((DEV / "tests/prelude.lua").read_text(encoding="utf-8"))
 for filename in files:
     compile_lua((ADDON / filename).read_text(encoding="utf-8-sig"), "@" + filename)("ForeverCharacterExport", addon)
-test_files = [DEV / "tests/contracts.lua"] + sorted((DEV / "tests/collectors").glob("*.lua"))
+test_files = [DEV / "tests/contracts.lua", DEV / "tests/settings.lua", DEV / "tests/ui.lua"] + sorted((DEV / "tests/collectors").glob("*.lua"))
 for test_file in test_files:
     compile_lua(test_file.read_text(encoding="utf-8-sig"), "@" + test_file.name)()
 failures, total = lua.eval("RunAllTests")()
