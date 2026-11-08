@@ -10,6 +10,7 @@ Addon.handlerErrors = {}
 Addon.order = {
     "character", "equipment", "bags", "bank", "quests", "talents", "spells", "pet", "actionbars",
     "skills", "reputation", "currency", "auras", "flightpaths", "addons",
+    "legacy", "classstate", "combatdetails", "professions", "spelldetails", "planning",
 }
 
 -- collector(self) -> raw section table (nested Probe results). formatter(self, section, out) writes the readable text.

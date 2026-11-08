@@ -27,5 +27,11 @@ Collectors/Currency.lua
 Collectors/Auras.lua
 Collectors/FlightPaths.lua
 Collectors/Addons.lua
+Collectors/Legacy.lua
+Collectors/ClassState.lua
+Collectors/CombatDetails.lua
+Collectors/Professions.lua
+Collectors/SpellDetails.lua
+Collectors/Planning.lua
 Export.lua
 UI.lua
