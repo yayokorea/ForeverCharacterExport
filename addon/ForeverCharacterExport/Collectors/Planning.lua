@@ -6,19 +6,25 @@ local _, Addon = ...
 -- trainer filter change, no window opened, no server data request (research doc section 7).
 --
 -- Evidence. Paths are relative to Interface/AddOns/. "upstream" = references/upstream/ (local copy of the pinned
--- Blizzard UI commit eac30af5...). "research cache" = dev/.tools/forever-research/ (same pinned commit; files that the
--- local upstream copy lacks, named by docs/collection-expansion-research.md). Cache-only evidence is marked [cache].
+-- Blizzard UI commit eac30af5...). UNVERIFIED = not found in references/upstream/; the declaration or call site
+-- exists only in the research cache dev/.tools/forever-research/ (same pinned commit, files the local copy lacks).
+-- Those calls stay behind Probe, so a missing global is reported as unsupported, never as empty.
 --
--- (12) Trainer services. All [cache]: Blizzard_TrainerUI/Mainline/Blizzard_TrainerUI.lua
+-- (12) Trainer services. ALL UNVERIFIED (cache only): Blizzard_TrainerUI/Mainline/Blizzard_TrainerUI.lua. The
+--   research doc names GetTrainerServiceInfo / GetTrainerServiceCost / GetTrainerServiceSkillReq (item 12);
+--   GetNumTrainerServices, C_Trainer.GetTrainerType and the TRAINER_SHOW / TRAINER_CLOSED events are NOT named there
+--   but block 12 cannot work without them (reported as a rule-1 deviation).
 --   * GetNumTrainerServices() -> count (:460). GetTrainerServiceInfo(i) -> name, serviceType, texture, reqLevel,
---     subText, category (:469, :618). Only "used" and "unavailable" are named serviceType values (:664-:679), so the
---     type is printed raw. GetTrainerServiceSkillReq(i) -> skill, rank, hasSkillReq; a nil skill means no skill
---     requirement (:637-:638). GetTrainerServiceCost(i) -> moneyCost, isProfession (:692); for a pet trainer the cost
---     is training points, not money (:700-:705). C_Trainer.GetTrainerType() -> Enum.TrainerType (:444;
---     Blizzard_APIDocumentationGenerated/TrainerDocumentation.lua:20, TrainerConstantsDocumentation.lua:13-16:
---     General 0, TalentsObsolete 1, Tradeskills 2, Pet 3).
+--     subText, category (:469, :618). Only "used" and "unavailable" appear as serviceType values (:664,:674,:676),
+--     so the type is printed raw. GetTrainerServiceSkillReq(i) -> skill, rank, hasSkillReq; a nil skill means no
+--     skill requirement (:637-:638). GetTrainerServiceCost(i) -> moneyCost, isProfession (:692); for a pet trainer
+--     the cost is training points, not money (:709-:717, TRAINING_POINTS_ABBREV). C_Trainer.GetTrainerType() ->
+--     Enum.TrainerType (:444; Blizzard_APIDocumentationGenerated/TrainerDocumentation.lua:20,
+--     TrainerConstantsDocumentation.lua:13-16: General 0, TalentsObsolete 1, Tradeskills 2, Pet 3).
 --   * Window state: events TRAINER_SHOW / TRAINER_CLOSED (TrainerDocumentation.lua:43,61). Blizzard_TrainerUI is
---     LoadOnDemand, so no frame global is touched; the open state comes from the events. Not persisted (live only).
+--     LoadOnDemand, so no frame global is touched; the open state comes from the events. The /fce window is a plain
+--     CreateFrame frame (UI.lua), not a UIPanel, and Collect() runs before it is shown, so opening it does not
+--     close a trainer. Not persisted (live only).
 --   * The list the UI shows can be narrowed by the trainer filters (SavedVariables TRAINER_FILTER_*, TrainerUI.toc:3),
 --     so completeness is reported as unknown. Filters are never changed.
 -- (13) Spec groups and equipment sets.
@@ -29,19 +35,21 @@ local _, Addon = ...
 --   * C_Traits.GetConfigInfo / GetTreeCurrencyInfo(configID, treeID, excludeStagedChanges): same calls as Talents.lua
 --     (upstream SharedTraitsDocumentation.lua; Blizzard_SharedTalentUtil.lua:148-155). Only config + point currency
 --     are read for each group; nodes are not walked.
---   * C_EquipmentSet.GetEquipmentSetIDs() -> {id...} (upstream PaperDollFrame.lua:3217; [cache]
---     EquipmentManagerDocumentation.lua:119). GetEquipmentSetInfo(id) -> name, iconFileID, setID, isEquipped,
---     numItems, numEquipped, numInInventory, numLost, numIgnored (:128-148; call sites PaperDollFrame.lua:2788,3159,
---     3193). GetEquipmentSetAssignedSpec(id) -> specIndex|nil (:71-84; PaperDollFrame.lua:3121). GetItemIDs(id) ->
---     {itemID...} with holes (:171-183, declaration only). GetIgnoredSlots(id) -> {slot=bool} (:152-165;
---     PaperDollFrame.lua:1560). CanUseEquipmentSets() -> bool ([cache] :22-28, declaration only).
---     C_Item.GetItemNameByID(itemInfo) -> name|nil (upstream ItemDocumentation.lua:846).
+--   * C_EquipmentSet.GetEquipmentSetIDs() -> {id...} (upstream PaperDollFrame.lua:3217). GetEquipmentSetInfo(id)
+--     -> name, iconFileID, setID, isEquipped, numItems, numEquipped, numInInventory, numLost, numIgnored (call
+--     sites upstream PaperDollFrame.lua:2788,3159,3193 use returns 1-4 and 8; the full return list is the
+--     declaration in the research cache EquipmentManagerDocumentation.lua:128-148 = UNVERIFIED for returns 5-9).
+--     GetEquipmentSetAssignedSpec(id) -> specIndex|nil (PaperDollFrame.lua:2603,3121). GetIgnoredSlots(id) ->
+--     {slot=bool} (PaperDollFrame.lua:1560-1563). Set contents (GetItemIDs) are NOT read: that call is declared only
+--     in the research cache and is not named by the research doc.
 -- (14) Flyouts. Discovered from the spellbook only: C_SpellBook.GetSpellBookItemInfo(slot, Enum.SpellBookSpellBank.
 --   Player) with itemType Flyout (4) where actionID is the flyoutID (upstream SpellBookDocumentation.lua:1016-1018,
---   SpellBookConstantsDocumentation.lua:27-31, Blizzard_SpellBookItem.lua:160). GetFlyoutInfo(flyoutID) -> ?, ?,
---   numSlots, isKnown (upstream Blizzard_PlayerSpellsFrame.lua:676; [cache] Blizzard_ActionBar/Shared/SpellFlyout.lua:
---   295: returns 1-2 are unnamed in the source and are not interpreted). GetFlyoutSlotInfo(flyoutID, i) -> spellID,
---   overrideSpellID, isKnownSlot, spellName, slotSpecID (SpellFlyout.lua:313; Blizzard_PlayerSpellsFrame.lua:680).
+--   SpellBookConstantsDocumentation.lua:27-31, Blizzard_SpellBookItem.lua:160). Upstream call sites:
+--   `local _, _, numSlots = GetFlyoutInfo(flyoutID)` (Blizzard_PlayerSpellsFrame.lua:676) and
+--   `local _, overrideSpellID, isKnown = GetFlyoutSlotInfo(flyoutID, i)` (:680). UNVERIFIED in upstream (cache
+--   Blizzard_ActionBar/Shared/SpellFlyout.lua:295,313; both named by the research doc item 14): GetFlyoutInfo
+--   return 4 = isKnown, GetFlyoutSlotInfo returns 1, 4, 5 = spellID, spellName, slotSpecID. Returns 1-2 of
+--   GetFlyoutInfo are unnamed in every source and are not interpreted.
 --   Action-bar flyout discovery is NOT done: GetActionInfo has no source in the mirror (see ActionBars.lua).
 -- (15) Cooldowns and charges (time-stamped snapshot).
 --   * C_Spell.GetSpellCooldown(spellIdentifier) -> SpellCooldownInfo|nil, C_Spell.GetSpellCharges(spellIdentifier)
@@ -62,7 +70,8 @@ local _, Addon = ...
 --   C_MajorFactions.GetMajorFactionProgressionInfo (:91,134; fields MajorFactionsDocumentation.lua:287-298),
 --   GetTotalReputationForRenownLevel (:147-151; MajorFactionsDocumentation.lua:126), GetRenownRewardsForLevel
 --   (:185; MajorFactionsDocumentation.lua:110; reward fields :323-339), C_SeasonInfo.GetTimeUntilCurrentPVPSeasonEnd
---   (:80; [cache] SeasonInfoDocumentation.lua:29; 0 = season end not known, :79), GetCurrentArenaSeason() (:35,55,101;
+--   (:80 call site; 0 = season end not known, :79; the declaration is only in the research cache
+--   SeasonInfoDocumentation.lua:29 = UNVERIFIED), GetCurrentArenaSeason() (:35,55,101;
 --   a value of 0 hides the season, :103). Weekly cap and next reward follow :140-200.
 
 local PVP_RANK_POINTS_FACTION_ID = 2800
@@ -70,7 +79,7 @@ local ITEM_SPELL, ITEM_FLYOUT = 1, 4 -- SpellBookConstantsDocumentation.lua:27-3
 
 local CAP = {
     trainer = 100, specGroups = 4, trees = 6, sets = 20, flyouts = 20, flyoutSlots = 40, spellSlots = 400,
-    cooldownList = 40, rewardScan = 60, rewardList = 6, setItems = 20,
+    cooldownList = 40, rewardScan = 60, rewardList = 6,
 }
 
 -- Equipped slots checked for item cooldowns (names verified in Equipment.lua; ammo has no on-use cooldown).
@@ -200,18 +209,8 @@ end
 -- ---------------------------------------------------------------------------------------------------------------
 -- (13b) Equipment sets
 
-local function readItemNames(self, itemIDs)
-    local names, unnamed = {}, 0
-    for _, itemID in ipairs(itemIDs) do
-        local name = self:Val(self:Probe("C_Item.GetItemNameByID", itemID))
-        if type(name) == "string" and name ~= "" then names[itemID] = name else unnamed = unnamed + 1 end
-    end
-    return names, unnamed
-end
-
 local function readEquipmentSets(self)
     local block = { sets = {} }
-    block.canUse = self:Probe("C_EquipmentSet.CanUseEquipmentSets")
     block.idList = self:Probe("C_EquipmentSet.GetEquipmentSetIDs")
     local ids = self:Val(block.idList)
     if type(ids) ~= "table" then
@@ -231,30 +230,10 @@ local function readEquipmentSets(self)
         else
             set.info = self:Probe("C_EquipmentSet.GetEquipmentSetInfo", setID)
             set.spec = self:Probe("C_EquipmentSet.GetEquipmentSetAssignedSpec", setID)
-            set.items = self:Probe("C_EquipmentSet.GetItemIDs", setID)
             set.ignored = self:Probe("C_EquipmentSet.GetIgnoredSlots", setID)
             -- MayReturnNothing; the UI treats a nil spec as "not assigned" (PaperDollFrame.lua:3121).
             if returnedNothing(set.spec) then set.spec.info = true end
-            if set.info.status ~= "ok" or set.items.status ~= "ok" then complete = false end
-            local items = self:Val(set.items)
-            if type(items) == "table" then
-                local slots, ids2 = {}, {}
-                for slot, itemID in pairs(items) do
-                    if isNumber(slot) and isNumber(itemID) then slots[#slots + 1] = slot end
-                end
-                table.sort(slots)
-                set.slots = {}
-                for position, slot in ipairs(slots) do
-                    if position > CAP.setItems then
-                        set.itemsTruncated = true
-                        complete = false
-                        break
-                    end
-                    set.slots[#set.slots + 1] = { slot = slot, itemID = items[slot] }
-                    ids2[#ids2 + 1] = items[slot]
-                end
-                set.names, set.unnamed = readItemNames(self, ids2)
-            end
+            if set.info.status ~= "ok" then complete = false end
         end
     end
     block.complete = complete
@@ -796,20 +775,15 @@ function F.specGroups(self, block, out, title)
     end
 end
 
-local function itemLabel(self, set, slot)
-    local name = set.names and set.names[slot.itemID]
-    return "slot " .. slot.slot .. "=" .. (name and self:Clean(name) .. " " or "") .. "(item " .. slot.itemID .. ")"
-end
-
 function F.equipmentSets(self, block, out, title)
     head(self, out, title, block, block.truncated and "세트 수 상한 도달" or nil)
-    out:Result("  장비 세트 사용 가능 (CanUseEquipmentSets)", block.canUse)
     local tag = self:Describe(block.idList)
     if tag then
         out:Add("  세트 목록: " .. tag)
         return
     end
-    out:Add("  세트 " .. block.total .. "개 (읽기만 함; 착용 안 함)" .. (block.truncated and ", 표시는 상한까지" or ""))
+    out:Add("  세트 " .. block.total .. "개 (읽기만 함; 착용 안 함; 구성품 목록은 근거 부족으로 미조사)"
+        .. (block.truncated and ", 표시는 상한까지" or ""))
     for _, set in ipairs(block.sets) do
         local infoTag = set.info and self:Describe(set.info)
         if not set.info then
@@ -827,18 +801,6 @@ function F.equipmentSets(self, block, out, title)
                 out:Add("      배정된 특성 그룹: 없음")
             else
                 out:Add("      배정된 특성 그룹: " .. self:Describe(set.spec))
-            end
-            local itemsTag = self:Describe(set.items)
-            if itemsTag then
-                out:Add("      구성품: " .. itemsTag)
-            elseif set.slots then
-                local parts = {}
-                for _, slot in ipairs(set.slots) do parts[#parts + 1] = itemLabel(self, set, slot) end
-                out:Add("      구성품 (slot 번호는 API 반환 키 그대로): " .. (#parts > 0 and table.concat(parts, "; ")
-                    or "없음") .. (set.itemsTruncated and " ... (상한 도달, truncated)" or ""))
-                if (set.unnamed or 0) > 0 then
-                    out:Add("      아이템 이름 미확인 " .. set.unnamed .. "개 (캐시 없음일 수 있음)")
-                end
             end
             local ignoredTag = self:Describe(set.ignored)
             if ignoredTag then

@@ -86,7 +86,6 @@ local function mock(overrides)
                 if id == 5000 then return 995, 60, true end
                 return 0, 0, false
             end,
-            GetItemNameByID = function(id) if id == 7001 then return "Test Bow" end end,
         },
         GetNumSpecGroups = function() return 2 end,
         C_SpecializationInfo = {
@@ -98,17 +97,12 @@ local function mock(overrides)
             GetTreeCurrencyInfo = function() return { { spent = 5, quantity = 2 } } end,
         },
         C_EquipmentSet = {
-            CanUseEquipmentSets = function() return true end,
             GetEquipmentSetIDs = function() return { 4, 9 } end,
             GetEquipmentSetInfo = function(id)
                 if id == 4 then return "PvE", 134, 4, true, 2, 2, 0, 0, 0 end
                 return "PvP", 135, 9, false, 2, 1, 1, 0, 1
             end,
             GetEquipmentSetAssignedSpec = function(id) if id == 4 then return 1 end end,
-            GetItemIDs = function(id)
-                if id == 4 then return { [16] = 7001, [1] = 7002 } end
-                return {}
-            end,
             GetIgnoredSlots = function() return { [3] = true, [4] = false } end,
         },
         GetNumTrainerServices = function() return 2 end,
@@ -153,7 +147,7 @@ Tests["collector.planning.normal"] = function()
             -- equipment sets
             has(text, "- PvE (setID 4) 착용중=true items=2 equipped=2 inBags=0 lost=0 ignored=0")
             has(text, "배정된 특성 그룹 index: 1")
-            has(text, "slot 1=(item 7002); slot 16=Test Bow (item 7001)")
+            lacks(text, "GetItemIDs")
             has(text, "- PvP (setID 9) 착용중=false")
             has(text, "배정된 특성 그룹: 없음")
             has(text, "무시 슬롯: 3")
@@ -465,26 +459,22 @@ end
 
 Tests["collector.planning.empty_equipment_sets_are_a_real_empty_list"] = function()
     WithGlobals(mock({
-        C_EquipmentSet = {
-            CanUseEquipmentSets = function() return true end,
-            GetEquipmentSetIDs = function() return {} end,
-        },
+        C_EquipmentSet = { GetEquipmentSetIDs = function() return {} end },
     }), function()
         local text, section = run()
-        has(text, "세트 0개 (읽기만 함; 착용 안 함)")
+        has(text, "세트 0개 (읽기만 함; 착용 안 함;")
         assert(section.equipmentSets.complete == true)
     end)
 end
 
-Tests["collector.planning.equipment_set_item_cap_is_marked"] = function()
-    local many = {}
-    for slot = 1, 30 do many[slot] = 8000 + slot end
+Tests["collector.planning.equipment_set_contents_are_not_read"] = function()
+    local called = false
     local sets = mock().C_EquipmentSet
-    sets.GetItemIDs = function() return many end
+    sets.GetItemIDs = function() called = true return {} end
     WithGlobals(mock({ C_EquipmentSet = sets }), function()
-        local text, section = run()
-        has(text, "... (상한 도달, truncated)")
-        assert(section.equipmentSets.complete == false)
+        local text = run()
+        assert(not called, "set contents must not be read (no upstream evidence)")
+        has(text, "구성품 목록은 근거 부족으로 미조사")
     end)
 end
 
